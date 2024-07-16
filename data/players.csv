@@ -1,0 +1,6 @@
+name,age,phone_number,preferred_playing_position,skill,bowler_type,keeper,skill_level,flat_number,consent_form,owner,auction_price
+John Doe,25,1234567890,Opener,Batsman,Fast,Yes,Intermediate,101,Yes,,
+Jane Smith,27,0987654321,Middle Order,Bowler,Spin,No,Advanced,102,Yes,,
+Alice Johnson,22,5551234567,Finisher,All-rounder,Medium,No,Expert,103,Yes,,
+Bob Brown,30,5557654321,Opener,Batsman,Fast,No,Advanced,104,Yes,,
+Charlie Davis,28,5559876543,Middle Order,Bowler,Spin,Yes,Beginner,105,Yes,,

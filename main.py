@@ -231,7 +231,3 @@ else:
         )
         auctioned_players.index = auctioned_players.index + 1  # Start index from 1
         st.dataframe(auctioned_players)
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8501))
-    st.run(port=port)
