@@ -5,6 +5,7 @@ import pandas as pd
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure, ConfigurationError
 from dotenv import load_dotenv
+import streamlit as st
 
 # Load environment variables
 load_dotenv()
@@ -13,6 +14,7 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+@st.cache_resource
 def get_db_connection():
     uri = os.getenv("MONGODB_URI")
     if not uri:
@@ -45,6 +47,7 @@ def init_db():
         logger.error(f"Error initializing database: {e}")
         raise
 
+@st.cache_data(ttl=600)
 def load_data(collection_name):
     client = get_db_connection()
     db = client['hpl_auction']
@@ -66,11 +69,13 @@ def update_auction_status(player_name, team_name, auction_price):
         {"$set": {"owner": team_name, "auction_price": auction_price}}
     )
 
+@st.cache_data(ttl=600)
 def fetch_auctioned_players():
     client = get_db_connection()
     db = client['hpl_auction']
     return pd.DataFrame(list(db.players.find({"owner": {"$ne": None}})))
 
+@st.cache_data(ttl=600)
 def fetch_unauctioned_players():
     client = get_db_connection()
     db = client['hpl_auction']

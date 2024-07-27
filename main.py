@@ -28,8 +28,11 @@ if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "team_budgets" not in st.session_state:
     st.session_state.team_budgets = {}
+if "data_loaded" not in st.session_state:
+    st.session_state.data_loaded = False
 
 # Function to initialize the database and load initial data
+@st.cache_resource
 def init_and_load_data():
     try:
         init_db()
@@ -41,20 +44,20 @@ def init_and_load_data():
             team: 20000 for team in teams_df["team_name"].unique()
         }
         logger.info("Data initialized and loaded successfully")
+        st.session_state.data_loaded = True
     except Exception as e:
         logger.error(f"Error initializing and loading data: {e}")
         st.error(f"An error occurred while initializing the application: {e}")
 
 # Initialize and load data when the app starts
-init_and_load_data()
+if not st.session_state.data_loaded:
+    init_and_load_data()
 
 # Function to reset the database
 def reset_database():
+    st.session_state.data_loaded = False
     init_and_load_data()
     st.experimental_rerun()
-
-# # Set wider layout
-# st.set_page_config(layout="wide")
 
 # Sidebar with logo, login, and reset
 with st.sidebar:
@@ -94,9 +97,11 @@ st.markdown(
 
 # Add refresh button
 if st.button("Refresh Data"):
+    st.session_state.data_loaded = False
     st.experimental_rerun()
 
 if st.session_state.logged_in:
+    @st.cache_data(ttl=600)
     def load_all_data():
         players_df = load_data("players")
         teams_df = load_data("teams")
@@ -196,7 +201,7 @@ if st.session_state.logged_in:
             if st.button("Update Auction Status"):
                 update_auction_status(selected_player, selected_team, auction_price)
                 st.success(f"Auction status updated: {selected_player} (Flat No: {player_details['Flat No']}) bought by {selected_team} for {auction_price} points")
-                players_df, teams_df = load_all_data()  # Refresh data
+                st.session_state.data_loaded = False  # Force data reload
                 st.session_state.random_player = None  # Reset the random player
                 st.experimental_rerun()  # Rerun the app to refresh all sections
         tab_index += 1
