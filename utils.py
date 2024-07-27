@@ -1,4 +1,5 @@
 import os
+import ssl
 import logging
 import pandas as pd
 from pymongo import MongoClient
@@ -17,7 +18,7 @@ def get_db_connection():
     if not uri:
         raise ValueError("No MONGODB_URI environment variable set")
     
-    logger.info(f"Attempting to connect with URI: {uri}")
+    logger.info("Attempting to connect to MongoDB")
     
     try:
         client = MongoClient(uri)
