@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import random
+import logging
 from utils import (
     init_db,
     load_data,
@@ -13,6 +14,13 @@ from utils import (
     load_initial_data,
 )
 
+# Set page config at the very beginning
+st.set_page_config(layout="wide")
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # Initialize session state
 if "role" not in st.session_state:
     st.session_state.role = None
@@ -23,14 +31,19 @@ if "team_budgets" not in st.session_state:
 
 # Function to initialize the database and load initial data
 def init_and_load_data():
-    init_db()
-    load_initial_data()
-    
-    # Set initial team budgets
-    teams_df = load_data("teams")
-    st.session_state.team_budgets = {
-        team: 20000 for team in teams_df["team_name"].unique()
-    }
+    try:
+        init_db()
+        load_initial_data()
+        
+        # Set initial team budgets
+        teams_df = load_data("teams")
+        st.session_state.team_budgets = {
+            team: 20000 for team in teams_df["team_name"].unique()
+        }
+        logger.info("Data initialized and loaded successfully")
+    except Exception as e:
+        logger.error(f"Error initializing and loading data: {e}")
+        st.error(f"An error occurred while initializing the application: {e}")
 
 # Initialize and load data when the app starts
 init_and_load_data()
@@ -40,8 +53,8 @@ def reset_database():
     init_and_load_data()
     st.experimental_rerun()
 
-# Set wider layout
-st.set_page_config(layout="wide")
+# # Set wider layout
+# st.set_page_config(layout="wide")
 
 # Sidebar with logo, login, and reset
 with st.sidebar:

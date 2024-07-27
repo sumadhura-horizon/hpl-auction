@@ -2,7 +2,7 @@ import os
 import logging
 import pandas as pd
 from pymongo import MongoClient
-from pymongo.errors import ConnectionFailure
+from pymongo.errors import ConnectionFailure, ConfigurationError
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -16,29 +16,33 @@ def get_db_connection():
     uri = os.getenv("MONGODB_URI")
     if not uri:
         raise ValueError("No MONGODB_URI environment variable set")
+    
+    logger.info(f"Attempting to connect with URI: {uri}")
+    
     try:
         client = MongoClient(uri)
         # The ismaster command is cheap and does not require auth.
         client.admin.command('ismaster')
         logger.info("Successfully connected to MongoDB")
         return client
-    except ConnectionFailure:
-        logger.error("Server not available")
+    except (ConnectionFailure, ConfigurationError) as e:
+        logger.error(f"Could not connect to MongoDB: {e}")
         raise
 
 def init_db():
-    client = get_db_connection()
-    db = client['hpl_auction']
-    
-    # Create collections if they don't exist
-    if 'users' not in db.list_collection_names():
-        db.create_collection('users')
-    if 'players' not in db.list_collection_names():
-        db.create_collection('players')
-    if 'teams' not in db.list_collection_names():
-        db.create_collection('teams')
+    try:
+        client = get_db_connection()
+        db = client['hpl_auction']
+        
+        # Create collections if they don't exist
+        for collection in ['users', 'players', 'teams']:
+            if collection not in db.list_collection_names():
+                db.create_collection(collection)
 
-    logger.info("Database initialized successfully.")
+        logger.info("Database initialized successfully.")
+    except Exception as e:
+        logger.error(f"Error initializing database: {e}")
+        raise
 
 def load_data(collection_name):
     client = get_db_connection()
