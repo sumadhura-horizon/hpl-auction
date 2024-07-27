@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import random
 from utils import (
     init_db,
     load_data,
@@ -199,7 +200,7 @@ if st.session_state.logged_in:
         for team in teams_df["team_name"].unique():
             st.write(f"**{team}**")
             team_players = players_df[players_df["owner"] == team].copy()
-            columns_to_display = ["Name", "Skill", "Preferred Playing Position", "Batting Skill Level", "Bowler Skill Level", "Bowler Type", "Wicket Keeper", "points", "auction_price"]
+            columns_to_display = ["Name", "Flat No", "Skill", "Preferred Playing Position", "Batting Skill Level", "Bowler Skill Level", "Bowler Type", "Wicket Keeper", "points", "auction_price"]
             team_players = team_players[columns_to_display]
             team_players.index = range(1, len(team_players) + 1)
             st.dataframe(team_players)
@@ -207,7 +208,7 @@ if st.session_state.logged_in:
     with tabs[tab_index + 1]:
         st.markdown("<h2 style='color: #FF5733;'>Unauctioned Players</h2>", unsafe_allow_html=True)
         unauctioned_players = players_df[players_df["owner"].isnull()].copy()
-        columns_to_display = ["Name", "Skill", "Preferred Playing Position", "Batting Skill Level", "Bowler Skill Level", "Bowler Type", "Wicket Keeper", "points"]
+        columns_to_display = ["Name", "Flat No", "Skill", "Preferred Playing Position", "Batting Skill Level", "Bowler Skill Level", "Bowler Type", "Wicket Keeper", "points"]
         unauctioned_players = unauctioned_players[columns_to_display]
         unauctioned_players.index = range(1, len(unauctioned_players) + 1)
         st.dataframe(unauctioned_players)
@@ -215,7 +216,7 @@ if st.session_state.logged_in:
     with tabs[tab_index + 2]:
         st.markdown("<h2 style='color: #FF5733;'>Auctioned Players</h2>", unsafe_allow_html=True)
         auctioned_players = players_df[players_df["owner"].notnull()].copy()
-        columns_to_display = ["Name", "Skill", "Preferred Playing Position", "Batting Skill Level", "Bowler Skill Level", "Bowler Type", "Wicket Keeper", "points", "owner", "auction_price"]
+        columns_to_display = ["Name", "Flat No", "Skill", "Preferred Playing Position", "Batting Skill Level", "Bowler Skill Level", "Bowler Type", "Wicket Keeper", "points", "owner", "auction_price"]
         auctioned_players = auctioned_players[columns_to_display]
         auctioned_players.index = range(1, len(auctioned_players) + 1)
         st.dataframe(auctioned_players)
@@ -263,7 +264,7 @@ if st.session_state.logged_in:
 
     with tabs[tab_index + 4]:
         st.markdown("<h2 style='color: #FF5733;'>Players List</h2>", unsafe_allow_html=True)
-        columns_to_display = ["Name", "Skill", "Preferred Playing Position", "Batting Skill Level", "Bowler Skill Level", "Bowler Type", "Wicket Keeper", "points", "owner", "auction_price"]
+        columns_to_display = ["Name", "Flat No", "Skill", "Preferred Playing Position", "Batting Skill Level", "Bowler Skill Level", "Bowler Type", "Wicket Keeper", "points", "owner", "auction_price"]
         players_list = players_df[columns_to_display].copy()
         players_list = players_list.sort_values("points", ascending=False)
         players_list.index = range(1, len(players_list) + 1)

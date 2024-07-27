@@ -1,12 +1,35 @@
+import os
+import logging
 import pandas as pd
 from pymongo import MongoClient
-from bson import ObjectId
+from pymongo.errors import ConnectionFailure
+from dotenv import load_dotenv
 
-# MongoDB connection
-client = MongoClient("mongodb+srv://hpladmin:JBaOfvvuOGaNwD5F@hpl-auction.7xalghe.mongodb.net/?retryWrites=true&w=majority&appName=hpl-auction")
-db = client['hpl_auction']
+# Load environment variables
+load_dotenv()
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+def get_db_connection():
+    uri = os.getenv("MONGODB_URI")
+    if not uri:
+        raise ValueError("No MONGODB_URI environment variable set")
+    try:
+        client = MongoClient(uri)
+        # The ismaster command is cheap and does not require auth.
+        client.admin.command('ismaster')
+        logger.info("Successfully connected to MongoDB")
+        return client
+    except ConnectionFailure:
+        logger.error("Server not available")
+        raise
 
 def init_db():
+    client = get_db_connection()
+    db = client['hpl_auction']
+    
     # Create collections if they don't exist
     if 'users' not in db.list_collection_names():
         db.create_collection('users')
@@ -15,27 +38,42 @@ def init_db():
     if 'teams' not in db.list_collection_names():
         db.create_collection('teams')
 
+    logger.info("Database initialized successfully.")
+
 def load_data(collection_name):
-    return pd.DataFrame(list(db[collection_name].find()))
+    client = get_db_connection()
+    db = client['hpl_auction']
+    data = list(db[collection_name].find())
+    return pd.DataFrame(data)
 
 def save_data(collection_name, data):
+    client = get_db_connection()
+    db = client['hpl_auction']
     db[collection_name].delete_many({})
     if not data.empty:
         db[collection_name].insert_many(data.to_dict('records'))
 
 def update_auction_status(player_name, team_name, auction_price):
+    client = get_db_connection()
+    db = client['hpl_auction']
     db.players.update_one(
         {"Name": player_name},
         {"$set": {"owner": team_name, "auction_price": auction_price}}
     )
 
 def fetch_auctioned_players():
+    client = get_db_connection()
+    db = client['hpl_auction']
     return pd.DataFrame(list(db.players.find({"owner": {"$ne": None}})))
 
 def fetch_unauctioned_players():
+    client = get_db_connection()
+    db = client['hpl_auction']
     return pd.DataFrame(list(db.players.find({"owner": None})))
 
 def check_collection_empty(collection_name):
+    client = get_db_connection()
+    db = client['hpl_auction']
     return db[collection_name].count_documents({}) == 0
 
 def calculate_points(row):
@@ -58,7 +96,8 @@ def calculate_points(row):
     return points
 
 def load_initial_data():
-    import os
+    client = get_db_connection()
+    db = client['hpl_auction']
     
     if check_collection_empty("users"):
         users_df = pd.read_csv("data/users.csv")
@@ -74,3 +113,5 @@ def load_initial_data():
     if check_collection_empty("teams"):
         teams_df = pd.read_csv("data/teams.csv")
         save_data("teams", teams_df)
+
+    logger.info("Initial data loaded successfully.")
