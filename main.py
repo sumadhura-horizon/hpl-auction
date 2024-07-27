@@ -11,12 +11,14 @@ from utils import (
     fetch_unauctioned_players,
     check_table_empty,
     calculate_points,
+    load_initial_data,
+    add_owner_column
 )
 
 # Database path
 db_path = "auction.db"
 
-# Initialize session state for team budgets and roles if not already present
+# Initialize session state
 if "role" not in st.session_state:
     st.session_state.role = None
 if "logged_in" not in st.session_state:
@@ -24,40 +26,20 @@ if "logged_in" not in st.session_state:
 if "team_budgets" not in st.session_state:
     st.session_state.team_budgets = {}
 
-
 # Function to initialize the database and load initial data
 def init_and_load_data():
     init_db(db_path)
-    load_initial_data()
-
-
-# Load initial data into the database if tables are empty
-def load_initial_data():
-    users_file_path = "data/users.csv"
-    players_file_path = "data/players.csv"
-    teams_file_path = "data/teams.csv"
-
-    if check_table_empty(db_path, "users") and os.path.exists(users_file_path):
-        users_df = pd.read_csv(users_file_path)
-        save_data(db_path, "users", users_df)
-
-    if check_table_empty(db_path, "players") and os.path.exists(players_file_path):
-        players_df = pd.read_csv(players_file_path)
-        players_df["points"] = players_df.apply(calculate_points, axis=1)
-        save_data(db_path, "players", players_df)
-
-    if check_table_empty(db_path, "teams") and os.path.exists(teams_file_path):
-        teams_df = pd.read_csv(teams_file_path)
-        save_data(db_path, "teams", teams_df)
-        # Set initial budgets for teams
-        st.session_state.team_budgets = {
-            team: 20000 for team in teams_df["team_name"].unique()
-        }
-
+    add_owner_column(db_path)
+    load_initial_data(db_path)
+    
+    # Set initial team budgets
+    teams_df = load_data(db_path, "teams")
+    st.session_state.team_budgets = {
+        team: 20000 for team in teams_df["team_name"].unique()
+    }
 
 # Initialize and load data when the app starts
 init_and_load_data()
-
 
 # Function to reset the database
 def reset_database():
@@ -65,112 +47,103 @@ def reset_database():
         os.remove(db_path)
     init_and_load_data()
     st.experimental_rerun()
+    
+# Helper function to find the correct column name
+def get_column(df, possible_names):
+    for name in possible_names:
+        if name in df.columns:
+            return name
+    return None
 
+# Set wider layout
+st.set_page_config(layout="wide")
 
-# Adjust the width of the main div for all screens except login
-def set_wide_mode(wide=True):
-    if wide:
-        st.markdown(
-            """
-            <style>
-            .main .block-container {
-                max-width: 90%;
-                padding-left: 5%;
-                padding-right: 5%;
-            }
-            </style>
-            """,
-            unsafe_allow_html=True,
-        )
+# Sidebar with logo, login, and reset
+with st.sidebar:
+    st.image("hpl.jpg", width=200)
+    
+    if not st.session_state.logged_in:
+        st.subheader("Login")
+        users_df = load_data(db_path, "users")
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        if st.button("Login"):
+            user = users_df[
+                (users_df["username"] == username) & (users_df["password"] == password)
+            ]
+            if not user.empty:
+                st.session_state.role = user.iloc[0]["role"]
+                st.session_state.logged_in = True
+                st.success(f"Logged in as {st.session_state.role}")
+                st.experimental_rerun()
+            else:
+                st.error("Invalid username or password")
     else:
-        st.markdown(
-            """
-            <style>
-            .main .block-container {
-                max-width: 80%;
-                padding-left: 10%;
-                padding-right: 10%;
-            }
-            </style>
-            """,
-            unsafe_allow_html=True,
-        )
+        st.success(f"Logged in as {st.session_state.role}")
+        if st.button("Logout"):
+            st.session_state.logged_in = False
+            st.session_state.role = None
+            st.experimental_rerun()
 
+    if st.button("Reset Data"):
+        reset_database()
 
-# Title
+# Main content
 st.markdown(
     "<h1 style='text-align: center; color: #4CAF50;'>Horizon Premier League Auction System</h1>",
     unsafe_allow_html=True,
 )
 
-# Add a reset button
-if st.button("Reset Data"):
-    reset_database()
+# Add refresh button
+if st.button("Refresh Data"):
+    st.experimental_rerun()
 
-# Login
-if not st.session_state.logged_in:
-    set_wide_mode(False)
-    st.subheader("Login")
-    users_df = load_data(db_path, "users")
+if st.session_state.logged_in:
+    def load_all_data():
+        add_owner_column(db_path)
+        players_df = load_data(db_path, "players")
+        teams_df = load_data(db_path, "teams")
+        
+        if 'owner' not in players_df.columns:
+            players_df['owner'] = None
+        if 'auction_price' not in players_df.columns:
+            players_df['auction_price'] = 0
+        if 'points' not in players_df.columns:
+            players_df['points'] = players_df.apply(calculate_points, axis=1)
+    
+        return players_df, teams_df
 
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
+    players_df, teams_df = load_all_data()
 
-    if st.button("Login"):
-        user = users_df[
-            (users_df["username"] == username) & (users_df["password"] == password)
-        ]
-        if not user.empty:
-            st.session_state.role = user.iloc[0]["role"]
-            st.session_state.logged_in = True
-            st.success(f"Logged in as {st.session_state.role}")
-            st.experimental_rerun()  # Refresh the page after login
-        else:
-            st.error("Invalid username or password")
-else:
-    set_wide_mode(True)
-    # Load data from the database
-    players_df = load_data(db_path, "players")
-    teams_df = load_data(db_path, "teams")
+    # Create tabs based on user role
+    if st.session_state.role in ["auctioneer", "admin"]:
+        tabs = st.tabs(["Update Auction Status", "Teams", "Unauctioned Players", "Auctioned Players", "Point System", "Players List"])
+    else:
+        tabs = st.tabs(["Teams", "Unauctioned Players", "Auctioned Players", "Point System", "Players List"])
 
-    # Ensure team budgets are set if not already initialized
-    if not st.session_state.team_budgets:
-        st.session_state.team_budgets = {
-            team: 20000 for team in teams_df["team_name"].unique()
-        }
-
-    # Tabs for different views
-    tab1, tab2, tab3, tab4 = st.tabs(
-        ["Update Auction Status", "Teams", "Unauctioned Players", "Auctioned Players"]
-    )
-
-    with tab1:
-        if st.session_state.role in ["auctioneer", "admin"]:
-            st.markdown(
-                "<h2 style='color: #FF5733;'>Update Auction Status</h2>",
-                unsafe_allow_html=True,
-            )
-            player_type = st.selectbox(
-                "Select Player Type", ["Batsman", "Bowler", "All-rounder"]
-            )
+    tab_index = 0
+    if st.session_state.role in ["auctioneer", "admin"]:
+        with tabs[tab_index]:
+            st.markdown("<h2 style='color: #FF5733;'>Update Auction Status</h2>", unsafe_allow_html=True)
+            player_type = st.selectbox("Select Player Type", ["Batsman", "Bowler", "All Rounder"])
+            
             available_players = players_df[
-                (players_df["owner"].isnull()) & (players_df["skill"] == player_type)
-            ]["name"]
+                (players_df["owner"].isnull()) & (players_df["Skill"] == player_type)
+            ]["Name"]
+            
             if available_players.empty:
                 st.write(f"No {player_type} players available for auction.")
             else:
                 selected_player = st.selectbox("Select Player", available_players)
                 selected_team = st.selectbox("Select Team", teams_df["team_name"])
-                player_price = int(
-                    players_df.loc[
-                        players_df["name"] == selected_player, "points"
-                    ].values[0]
-                )
+                player_price = int(players_df.loc[players_df["Name"] == selected_player, "points"].values[0])
+                
+                if selected_team not in st.session_state.team_budgets:
+                    st.session_state.team_budgets[selected_team] = 20000  # Default budget
+                
                 remaining_budget = int(
                     st.session_state.team_budgets[selected_team]
-                    - players_df[players_df["owner"] == selected_team][
-                        "auction_price"
-                    ].sum()
+                    - players_df[players_df["owner"] == selected_team]["auction_price"].sum()
                 )
                 auction_price = st.number_input(
                     "Auction Price",
@@ -178,56 +151,102 @@ else:
                     max_value=remaining_budget,
                     step=100,
                 )
-
                 if st.button("Update Auction Status"):
-                    update_auction_status(
-                        db_path, selected_player, selected_team, auction_price
-                    )
-                    st.success(
-                        f"Auction status updated: {selected_player} bought by {selected_team} for {auction_price} points"
-                    )
-                    st.experimental_rerun()  # Refresh the page to update all tabs
+                    update_auction_status(db_path, selected_player, selected_team, auction_price)
+                    st.success(f"Auction status updated: {selected_player} bought by {selected_team} for {auction_price} points")
+                    players_df, teams_df = load_all_data()  # Refresh data
+                    st.experimental_rerun()  # Rerun the app to refresh all sections
+        tab_index += 1
 
-    with tab2:
-        st.markdown(
-            "<h2 style='color: #FF5733;'>Teams and their Players</h2>",
-            unsafe_allow_html=True,
-        )
+    with tabs[tab_index]:
+        st.markdown("<h2 style='color: #FF5733;'>Teams and their Players</h2>", unsafe_allow_html=True)
         team_expenses = players_df.groupby("owner")["auction_price"].sum().reset_index()
         team_expenses.columns = ["team", "expenses"]
         team_expenses["expenses"] = team_expenses["expenses"].fillna(0)
-        team_expenses["remaining"] = (
-            team_expenses["team"].map(st.session_state.team_budgets)
-            - team_expenses["expenses"]
-        )
-        team_expenses.index = team_expenses.index + 1  # Start index from 1
+        team_expenses["remaining"] = team_expenses["team"].map(st.session_state.team_budgets) - team_expenses["expenses"]
+        team_expenses.index = team_expenses.index + 1
         st.dataframe(team_expenses[["team", "expenses", "remaining"]])
-
+        
         for team in teams_df["team_name"].unique():
             st.write(f"**{team}**")
-            team_players = players_df[players_df["owner"] == team].drop(
-                columns=["phone_number", "consent_form", "flat_number"]
-            )
-            team_players.index = team_players.index + 1  # Start index from 1
+            team_players = players_df[players_df["owner"] == team].copy()
+            columns_to_display = ["Name", "Skill", "Preferred Playing Position", "Batting Skill Level", "Bowler Skill Level", "Bowler Type", "Wicket Keeper", "points", "auction_price"]
+            team_players = team_players[columns_to_display]
+            team_players.index = range(1, len(team_players) + 1)
             st.dataframe(team_players)
 
-    with tab3:
-        st.markdown(
-            "<h2 style='color: #FF5733;'>Unauctioned Players</h2>",
-            unsafe_allow_html=True,
-        )
-        unauctioned_players = fetch_unauctioned_players(db_path).drop(
-            columns=["phone_number", "consent_form", "flat_number"]
-        )
-        unauctioned_players.index = unauctioned_players.index + 1  # Start index from 1
+    with tabs[tab_index + 1]:
+        st.markdown("<h2 style='color: #FF5733;'>Unauctioned Players</h2>", unsafe_allow_html=True)
+        unauctioned_players = players_df[players_df["owner"].isnull()].copy()
+        columns_to_display = ["Name", "Skill", "Preferred Playing Position", "Batting Skill Level", "Bowler Skill Level", "Bowler Type", "Wicket Keeper", "points"]
+        unauctioned_players = unauctioned_players[columns_to_display]
+        unauctioned_players.index = range(1, len(unauctioned_players) + 1)
         st.dataframe(unauctioned_players)
 
-    with tab4:
-        st.markdown(
-            "<h2 style='color: #FF5733;'>Auctioned Players</h2>", unsafe_allow_html=True
-        )
-        auctioned_players = fetch_auctioned_players(db_path).drop(
-            columns=["phone_number", "consent_form", "flat_number"]
-        )
-        auctioned_players.index = auctioned_players.index + 1  # Start index from 1
+    with tabs[tab_index + 2]:
+        st.markdown("<h2 style='color: #FF5733;'>Auctioned Players</h2>", unsafe_allow_html=True)
+        auctioned_players = players_df[players_df["owner"].notnull()].copy()
+        columns_to_display = ["Name", "Skill", "Preferred Playing Position", "Batting Skill Level", "Bowler Skill Level", "Bowler Type", "Wicket Keeper", "points", "owner", "auction_price"]
+        auctioned_players = auctioned_players[columns_to_display]
+        auctioned_players.index = range(1, len(auctioned_players) + 1)
         st.dataframe(auctioned_players)
+
+    with tabs[tab_index + 3]:
+        st.markdown("<h2 style='color: #FF5733;'>Point System</h2>", unsafe_allow_html=True)
+        st.markdown("""
+        Our auction system uses the following point allocation:
+
+        1. **Preferred Playing Position:**
+           - Opener: 100 points
+           - Middle Order: 75 points
+           - Finisher: 100 points
+
+        2. **Skill:**
+           - Batsman: 100 points
+           - Bowler: 100 points
+           - All Rounder: 150 points
+
+        3. **Batting Skill Level:**
+           - Beginner: 25 points
+           - Intermediate: 50 points
+           - Advanced: 75 points
+           - Expert: 100 points
+
+        4. **Bowler Skill Level (only for Bowlers and All rounders):**
+           - Beginner: 25 points
+           - Intermediate: 50 points
+           - Advanced: 75 points
+           - Expert: 100 points
+
+        5. **Bowler Type (only for Bowlers and All Runders):**
+           - Fast: 75 points
+           - Medium: 50 points
+           - Spin: 75 points
+
+        6. **Wicket Keeper:**
+           - Yes: 50 points
+           - No: 0 points
+
+        Players are awarded points based on their attributes in each category. The total points for a player is the sum of points from all applicable categories.
+
+        Note: Bowler Skill Level and Bowler Type points are only awarded to players with the Bowler or All Rounder skill.
+        """)
+
+    with tabs[tab_index + 4]:
+        st.markdown("<h2 style='color: #FF5733;'>Players List</h2>", unsafe_allow_html=True)
+        columns_to_display = ["Name", "Skill", "Preferred Playing Position", "Batting Skill Level", "Bowler Skill Level", "Bowler Type", "Wicket Keeper", "points", "owner", "auction_price"]
+        players_list = players_df[columns_to_display].copy()
+        players_list = players_list.sort_values("points", ascending=False)
+        players_list.index = range(1, len(players_list) + 1)
+        st.dataframe(players_list)
+        
+        csv = players_list.to_csv(index=False)
+        st.download_button(
+            label="Download Players List",
+            data=csv,
+            file_name="players_list.csv",
+            mime="text/csv",
+        )
+
+else:
+    st.warning("Please log in to access the auction system.")

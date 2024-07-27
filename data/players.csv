@@ -1,6 +1,49 @@
-name,age,phone_number,preferred_playing_position,skill,bowler_type,keeper,skill_level,flat_number,consent_form,owner,auction_price
-John Doe,25,1234567890,Opener,Batsman,Fast,Yes,Intermediate,101,Yes,,
-Jane Smith,27,0987654321,Middle Order,Bowler,Spin,No,Advanced,102,Yes,,
-Alice Johnson,22,5551234567,Finisher,All-rounder,Medium,No,Expert,103,Yes,,
-Bob Brown,30,5557654321,Opener,Batsman,Fast,No,Advanced,104,Yes,,
-Charlie Davis,28,5559876543,Middle Order,Bowler,Spin,Yes,Beginner,105,Yes,,
+Name,Flat No,Age,Phone Number,Preferred Playing Position,Skill,Batting Skill Level,Bowler Skill Level,Bowler Type,Wicket Keeper
+Abhijeet Jhunjhunwala,1158,40,9432215221,Middle Order,All Rounder,Intermediate,Intermediate,Medium,Yes
+Sravan Pekala,1131,37,8790896638,Middle Order,All Rounder,Intermediate,Intermediate,Medium,No
+Aakash Jain ,3163,41,8096677733,Middle Order,All Rounder,Intermediate,Advanced,Medium,No
+Vivek Gorania,2111,24,7600782087,Middle Order,All Rounder,Intermediate,Intermediate,Medium,No
+Kalyan P,3101,35,9491191215,Middle Order,All Rounder,Advanced,Intermediate,Spin,Yes
+S Krishna Chaitanya ,2134,26,7995787810,Middle Order,Bowler,Intermediate,Advanced,Spin,Yes
+Naresh,1051,44,7893515998,Opener,All Rounder,Advanced,Advanced,Medium,No
+Mohd Saqib,2165,34,9582403240,Opener,Batsman,Intermediate,Beginner,Spin,Yes
+Mayur,2184,31,9052799798,Middle Order,All Rounder,Intermediate,Intermediate,Medium,No
+Sudheer Reddy ,3048,39,9966259439,Middle Order,All Rounder,Expert,Advanced,Medium,Yes
+Pulkit Sharma,1054,26,8708098808,Opener,All Rounder,Beginner,Beginner,Spin,Yes
+Avinash Reddy A,4072,26,7036933393,Middle Order,All Rounder,Advanced,Advanced,Medium,No
+Rishi Mahankali,1113,27,8977646480,Middle Order,All Rounder,Intermediate,Intermediate,Fast,No
+Jayaprakash ,2123,40,9849643444,Middle Order,Batsman,Intermediate,Intermediate,Medium,No
+Vaidit Patel,2111,24,9879591098,Middle Order,All Rounder,Intermediate,Intermediate,Medium,No
+Rawoof Mohammad ,1106,36,9642699045,Middle Order,Bowler,Intermediate,Advanced,Medium,No
+Rahul,1128,27,7093764040,Middle Order,All Rounder,Beginner,Intermediate,Spin,No
+Mithil Goda,2153,35,9160176192,Opener,Batsman,Advanced,Beginner,None,Yes
+ Govinda Reddy.M,3178,44,9177293397,Middle Order,All Rounder,Intermediate,Intermediate,Medium,No
+Sanket Kulkarni ,2052,42,7207904499,Middle Order,All Rounder,Intermediate,Intermediate,Medium,Yes
+Maddirala Chaitanya Kumar ,1166,29,8688886809,Middle Order,All Rounder,Advanced,Advanced,Medium,No
+Vishal Meghani,1135,35,9967933440,Middle Order,Batsman,Intermediate,Beginner,Spin,No
+Mahesh Kumar Heda,1115,40,9296152695,Middle Order,Batsman,Intermediate,Beginner,None,No
+Hara Shankar Nayak,2054,36,8447717770,Opener,Batsman,Advanced,Beginner,Medium,Yes
+RaviKiran ,1129,42,9908562255,Middle Order,All Rounder,Advanced,Advanced,Medium,No
+Sanchit Balchandani,2173,38,9899838120,Middle Order,All Rounder,Intermediate,Intermediate,Spin,Yes
+Tripati Patro,3107,Young,9553434987,Middle Order,Batsman,Intermediate,NA,None,No
+Nagaraju Vommina ,4054,39,9886804128,Middle Order,All Rounder,Intermediate,Intermediate,Spin,Yes
+Ankit Mittal,2163,37,9986511919,Middle Order,All Rounder,Advanced,Advanced,Medium,No
+Praveen Vennela,2092,34,9985181619,Opener,Batsman,Intermediate,Beginner,Medium,No
+Chaitanya,3103,40,9989706837,Middle Order,Batsman,Beginner,Beginner,Spin,No
+Praveen Chary,4084,37,9920680040,Finisher,Bowler,Beginner,Intermediate,Medium,No
+NaMo (Narayana Motamarri) ,3108,39,9515153758,Middle Order,All Rounder,Intermediate,Intermediate,Spin,No
+Ravi,2053,42,9966872845,Middle Order,All Rounder,Intermediate,Intermediate,Spin,Yes
+Venkata Narasimha Reddy,3047,40,9553362555,Middle Order,All Rounder,Intermediate,Advanced,Medium,No
+Karthik boinapally,2114,40,9000274695,Middle Order,All Rounder,Intermediate,Intermediate,Spin,Yes
+Sangam,3032,43,9886383445,Middle Order,Batsman,Intermediate,Intermediate,Spin,No
+Nitheesh Reddy ,4072,25,7036046087,Opener,Batsman,Expert,Advanced,Medium,No
+Ashim Sharma,1054,26,9551812685,Middle Order,Bowler,Beginner,Beginner,Medium,No
+Sunil,1084,37,8106789381,Middle Order,All Rounder,Intermediate,Intermediate,Medium,Yes
+Venkateshwar Reddy E,2073,37,9000977886,Opener,Batsman,Advanced,NA,None,Yes
+Rakesh Chanda,3167,38,8500208990,Middle Order,Batsman,Intermediate,NA,None,No
+Vamshi Krishna Nugoor,2121,30,9940265640,Middle Order,Batsman,Intermediate,Beginner,Spin,Yes
+Manideep ,2184,27,9963962567,Middle Order,Bowler,Intermediate,Expert,Spin,No
+Hiralal Choudhary,4174,35,8977448416,Middle Order,All Rounder,Intermediate,Intermediate,Medium,No
+Pankaj,2181,47,7003726424,Middle Order,Batsman,Intermediate,NA,None,No
+Rajendra ,1054,32,9995949187,Middle Order,All Rounder,Intermediate,Intermediate,Spin,No
+Ajay Kumar ,2036,28,8466092466,Middle Order,Batsman,Intermediate,NA,None,No
