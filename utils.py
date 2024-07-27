@@ -47,7 +47,6 @@ def init_db():
         logger.error(f"Error initializing database: {e}")
         raise
 
-@st.cache_data(ttl=600)
 def load_data(collection_name):
     client = get_db_connection()
     db = client['hpl_auction']
@@ -86,6 +85,20 @@ def check_collection_empty(collection_name):
     db = client['hpl_auction']
     return db[collection_name].count_documents({}) == 0
 
+def mark_player_status(player_name, status):
+    client = get_db_connection()
+    db = client['hpl_auction']
+    db.players.update_one(
+        {"Name": player_name},
+        {"$set": {"auction_status": status}}
+    )
+
+@st.cache_data(ttl=600)
+def get_players_by_status(status):
+    client = get_db_connection()
+    db = client['hpl_auction']
+    return pd.DataFrame(list(db.players.find({"auction_status": status})))
+
 def calculate_points(row):
     points = 0
 
@@ -103,7 +116,8 @@ def calculate_points(row):
     points += bowler_type_points.get(row.get("Bowler Type"), 0)
     points += keeper_points.get(row.get("Wicket Keeper"), 0)
 
-    return points
+    # Round to nearest 100
+    return int(round(points / 100.0) * 100)
 
 def load_initial_data():
     client = get_db_connection()
@@ -125,3 +139,41 @@ def load_initial_data():
         save_data("teams", teams_df)
 
     logger.info("Initial data loaded successfully.")
+    
+def reset_auction_data():
+    client = get_db_connection()
+    db = client['hpl_auction']
+    
+    # Reset player auction data
+    db.players.update_many(
+        {},
+        {
+            "$set": {"owner": None, "auction_price": 0, "auction_status": "regular"}
+        }
+    )
+    
+    # Reset team budgets (if you're storing them in the database)
+    # If you're not storing team budgets in the database, you can omit this part
+    teams = db.teams.find()
+    for team in teams:
+        db.teams.update_one(
+            {"_id": team["_id"]},
+            {"$set": {"budget": 20000}}  # Or whatever the initial budget should be
+        )
+    
+    logger.info("Auction data reset successfully.")
+    
+    
+def undo_auction(player_name):
+    client = get_db_connection()
+    db = client['hpl_auction']
+    result = db.players.update_one(
+        {"Name": player_name},
+        {"$set": {"owner": None, "auction_price": 0, "auction_status": "regular"}}
+    )
+    if result.modified_count == 1:
+        logger.info(f"Auction undone for player: {player_name}")
+        return True
+    else:
+        logger.warning(f"Failed to undo auction for player: {player_name}")
+        return False
