@@ -1,7 +1,5 @@
 import streamlit as st
 import pandas as pd
-import sqlite3
-import os
 from utils import (
     init_db,
     load_data,
@@ -9,14 +7,10 @@ from utils import (
     update_auction_status,
     fetch_auctioned_players,
     fetch_unauctioned_players,
-    check_table_empty,
+    check_collection_empty,
     calculate_points,
     load_initial_data,
-    add_owner_column
 )
-
-# Database path
-db_path = "auction.db"
 
 # Initialize session state
 if "role" not in st.session_state:
@@ -28,12 +22,11 @@ if "team_budgets" not in st.session_state:
 
 # Function to initialize the database and load initial data
 def init_and_load_data():
-    init_db(db_path)
-    add_owner_column(db_path)
-    load_initial_data(db_path)
+    init_db()
+    load_initial_data()
     
     # Set initial team budgets
-    teams_df = load_data(db_path, "teams")
+    teams_df = load_data("teams")
     st.session_state.team_budgets = {
         team: 20000 for team in teams_df["team_name"].unique()
     }
@@ -43,17 +36,8 @@ init_and_load_data()
 
 # Function to reset the database
 def reset_database():
-    if os.path.exists(db_path):
-        os.remove(db_path)
     init_and_load_data()
     st.experimental_rerun()
-    
-# Helper function to find the correct column name
-def get_column(df, possible_names):
-    for name in possible_names:
-        if name in df.columns:
-            return name
-    return None
 
 # Set wider layout
 st.set_page_config(layout="wide")
@@ -64,7 +48,7 @@ with st.sidebar:
     
     if not st.session_state.logged_in:
         st.subheader("Login")
-        users_df = load_data(db_path, "users")
+        users_df = load_data("users")
         username = st.text_input("Username")
         password = st.text_input("Password", type="password")
         if st.button("Login"):
@@ -100,9 +84,8 @@ if st.button("Refresh Data"):
 
 if st.session_state.logged_in:
     def load_all_data():
-        add_owner_column(db_path)
-        players_df = load_data(db_path, "players")
-        teams_df = load_data(db_path, "teams")
+        players_df = load_data("players")
+        teams_df = load_data("teams")
         
         if 'owner' not in players_df.columns:
             players_df['owner'] = None
@@ -125,37 +108,83 @@ if st.session_state.logged_in:
     if st.session_state.role in ["auctioneer", "admin"]:
         with tabs[tab_index]:
             st.markdown("<h2 style='color: #FF5733;'>Update Auction Status</h2>", unsafe_allow_html=True)
-            player_type = st.selectbox("Select Player Type", ["Batsman", "Bowler", "All Rounder"])
             
-            available_players = players_df[
-                (players_df["owner"].isnull()) & (players_df["Skill"] == player_type)
-            ]["Name"]
+            # Random player selection section
+            st.subheader("Random Player Selection")
+            player_category = st.selectbox("Select Player Category", ["All", "Batsman", "Bowler", "All Rounder"])
             
-            if available_players.empty:
-                st.write(f"No {player_type} players available for auction.")
+            if 'random_player' not in st.session_state:
+                st.session_state.random_player = None
+
+            if st.button("Pick Random Player for Auction"):
+                unauctioned_players = players_df[players_df["owner"].isnull()]
+                
+                if player_category != "All":
+                    unauctioned_players = unauctioned_players[unauctioned_players["Skill"] == player_category]
+                
+                if not unauctioned_players.empty:
+                    st.session_state.random_player = unauctioned_players.sample(n=1).iloc[0]
+                    st.success(f"Random player picked for auction: {st.session_state.random_player['Name']} (Flat No: {st.session_state.random_player['Flat No']})")
+                else:
+                    st.warning(f"No unauctioned players available in the {player_category} category.")
+                    st.session_state.random_player = None
+
+            st.markdown("<hr>", unsafe_allow_html=True)
+            
+            # Auction details section
+            if st.session_state.random_player is not None:
+                selected_player = st.session_state.random_player['Name']
+                player_type = st.session_state.random_player['Skill']
             else:
-                selected_player = st.selectbox("Select Player", available_players)
-                selected_team = st.selectbox("Select Team", teams_df["team_name"])
-                player_price = int(players_df.loc[players_df["Name"] == selected_player, "points"].values[0])
+                player_type = st.selectbox("Select Player Type", ["Batsman", "Bowler", "All Rounder"])
+                available_players = players_df[
+                    (players_df["owner"].isnull()) & (players_df["Skill"] == player_type)
+                ][["Name", "Flat No"]]
+                if available_players.empty:
+                    st.write(f"No {player_type} players available for auction.")
+                    st.stop()  # This stops the execution of the app here if no players are available
+
+                # Create a list of strings combining Name and Flat No
+                player_options = [f"{row['Name']} (Flat No: {row['Flat No']})" for _, row in available_players.iterrows()]
+                selected_player_with_flat = st.selectbox("Select Player", player_options)
                 
-                if selected_team not in st.session_state.team_budgets:
-                    st.session_state.team_budgets[selected_team] = 20000  # Default budget
-                
-                remaining_budget = int(
-                    st.session_state.team_budgets[selected_team]
-                    - players_df[players_df["owner"] == selected_team]["auction_price"].sum()
-                )
-                auction_price = st.number_input(
-                    "Auction Price",
-                    min_value=player_price,
-                    max_value=remaining_budget,
-                    step=100,
-                )
-                if st.button("Update Auction Status"):
-                    update_auction_status(db_path, selected_player, selected_team, auction_price)
-                    st.success(f"Auction status updated: {selected_player} bought by {selected_team} for {auction_price} points")
-                    players_df, teams_df = load_all_data()  # Refresh data
-                    st.experimental_rerun()  # Rerun the app to refresh all sections
+                # Extract just the name from the selected option
+                selected_player = selected_player_with_flat.split(" (Flat No:")[0]
+
+            # Display player details
+            player_details = players_df.loc[players_df['Name'] == selected_player].iloc[0]
+            st.write(f"Selected Player: {selected_player}")
+            st.write(f"Flat No: {player_details['Flat No']}")
+            st.write(f"Skill: {player_details['Skill']}")
+            st.write(f"Preferred Playing Position: {player_details['Preferred Playing Position']}")
+            st.write(f"Batting Skill Level: {player_details['Batting Skill Level']}")
+            st.write(f"Bowler Skill Level: {player_details['Bowler Skill Level']}")
+            st.write(f"Bowler Type: {player_details['Bowler Type']}")
+            st.write(f"Wicket Keeper: {player_details['Wicket Keeper']}")
+            st.write(f"Points: {player_details['points']}")
+
+            selected_team = st.selectbox("Select Team", teams_df["team_name"])
+            player_price = int(player_details["points"])
+            
+            if selected_team not in st.session_state.team_budgets:
+                st.session_state.team_budgets[selected_team] = 20000  # Default budget
+            
+            remaining_budget = int(
+                st.session_state.team_budgets[selected_team]
+                - players_df[players_df["owner"] == selected_team]["auction_price"].sum()
+            )
+            auction_price = st.number_input(
+                "Auction Price",
+                min_value=player_price,
+                max_value=remaining_budget,
+                step=100,
+            )
+            if st.button("Update Auction Status"):
+                update_auction_status(selected_player, selected_team, auction_price)
+                st.success(f"Auction status updated: {selected_player} (Flat No: {player_details['Flat No']}) bought by {selected_team} for {auction_price} points")
+                players_df, teams_df = load_all_data()  # Refresh data
+                st.session_state.random_player = None  # Reset the random player
+                st.experimental_rerun()  # Rerun the app to refresh all sections
         tab_index += 1
 
     with tabs[tab_index]:
