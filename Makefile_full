@@ -1,0 +1,222 @@
+# Badminton League Auction System - Makefile
+# This Makefile provides all common commands for development and deployment
+
+# Variables
+PYTHON := python3
+VENV_DIR := .venv
+VENV_PYTHON := $(VENV_DIR)/bin/python
+PIP := $(VENV_DIR)/bin/pip
+STREAMLIT := $(VENV_DIR)/bin/streamlit
+REQUIREMENTS := requirements.txt
+APP_FILE := app.py
+DB_FILE := auction.db
+PORT := 8501
+
+# Colors for output
+RED := \033[0;31m
+GREEN := \033[0;32m
+YELLOW := \033[0;33m
+BLUE := \033[0;34m
+PURPLE := \033[0;35m
+CYAN := \033[0;36m
+WHITE := \033[0;37m
+RESET := \033[0m
+
+# Default target
+.DEFAULT_GOAL := help
+
+.PHONY: help setup install clean run dev test lint format check-deps \
+        init-db reset-db upload-users upload-players upload-teams \
+        backup-db restore-db export-data docker-build docker-run \
+        deploy production-setup check-structure
+
+help: ## Show this help message
+	@echo "$(CYAN)Badminton League Auction System - Make Commands$(RESET)"
+	@echo ""
+	@echo "$(YELLOW)Setup Commands:$(RESET)"
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E "(setup|install|clean)" | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-20s$(RESET) %s\n", $$1, $$2}'
+	@echo ""
+	@echo "$(YELLOW)Development Commands:$(RESET)"
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E "(run|dev|test|lint|format)" | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-20s$(RESET) %s\n", $$1, $$2}'
+	@echo ""
+	@echo "$(YELLOW)Database Commands:$(RESET)"
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E "(init-db|reset-db|upload|backup|restore|export)" | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-20s$(RESET) %s\n", $$1, $$2}'
+	@echo ""
+	@echo "$(YELLOW)Deployment Commands:$(RESET)"
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E "(docker|deploy|production)" | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-20s$(RESET) %s\n", $$1, $$2}'
+	@echo ""
+
+# Setup Commands
+setup: install init-db ## Complete setup: install dependencies and initialize database
+	@echo "$(GREEN)✅ Setup complete! Run 'make run' to start the application.$(RESET)"
+
+install: $(VENV_DIR) ## Install dependencies in virtual environment
+	@echo "$(BLUE)📦 Installing dependencies...$(RESET)"
+	$(PIP) install --upgrade pip
+	$(PIP) install -r $(REQUIREMENTS)
+	@echo "$(GREEN)✅ Dependencies installed$(RESET)"
+
+$(VENV_DIR): ## Create virtual environment
+	@echo "$(BLUE)🔧 Creating virtual environment...$(RESET)"
+	$(PYTHON) -m venv $(VENV_DIR)
+	@echo "$(GREEN)✅ Virtual environment created$(RESET)"
+
+clean: ## Clean up generated files and virtual environment
+	@echo "$(YELLOW)🧹 Cleaning up...$(RESET)"
+	rm -rf $(VENV_DIR)
+	rm -rf __pycache__
+	rm -rf src/__pycache__
+	rm -rf src/core/__pycache__
+	rm -rf src/ui/__pycache__
+	rm -rf src/utils/__pycache__
+	rm -rf config/__pycache__
+	rm -rf .pytest_cache
+	rm -rf *.egg-info
+	find . -name "*.pyc" -delete
+	find . -name "*.pyo" -delete
+	@echo "$(GREEN)✅ Cleanup complete$(RESET)"
+
+# Development Commands
+run: $(VENV_DIR) ## Run the Streamlit application
+	@echo "$(BLUE)🚀 Starting Badminton League Auction System...$(RESET)"
+	@echo "$(CYAN)📱 Application will be available at: http://localhost:$(PORT)$(RESET)"
+	@echo "$(YELLOW)Press Ctrl+C to stop the application$(RESET)"
+	@echo ""
+	$(STREAMLIT) run $(APP_FILE) --server.port $(PORT)
+
+dev: $(VENV_DIR) ## Run in development mode with auto-reload
+	@echo "$(BLUE)🔧 Starting in development mode...$(RESET)"
+	$(STREAMLIT) run $(APP_FILE) --server.port $(PORT) --server.runOnSave true
+
+test: $(VENV_DIR) ## Run tests
+	@echo "$(BLUE)🧪 Running tests...$(RESET)"
+	$(VENV_PYTHON) -m pytest tests/ -v
+	@echo "$(GREEN)✅ Tests completed$(RESET)"
+
+lint: $(VENV_DIR) ## Run linting checks
+	@echo "$(BLUE)🔍 Running linting checks...$(RESET)"
+	$(VENV_PYTHON) -m flake8 src/ scripts/ config/ $(APP_FILE) --max-line-length=120
+	$(VENV_PYTHON) -m pylint src/ scripts/ config/ $(APP_FILE)
+	@echo "$(GREEN)✅ Linting completed$(RESET)"
+
+format: $(VENV_DIR) ## Format code with black and isort
+	@echo "$(BLUE)✨ Formatting code...$(RESET)"
+	$(VENV_PYTHON) -m black src/ scripts/ config/ $(APP_FILE)
+	$(VENV_PYTHON) -m isort src/ scripts/ config/ $(APP_FILE)
+	@echo "$(GREEN)✅ Code formatted$(RESET)"
+
+check-deps: $(VENV_DIR) ## Check for outdated dependencies
+	@echo "$(BLUE)📋 Checking dependencies...$(RESET)"
+	$(PIP) list --outdated
+	@echo "$(GREEN)✅ Dependency check completed$(RESET)"
+
+# Database Commands
+init-db: $(VENV_DIR) ## Initialize database with initial data
+	@echo "$(BLUE)📊 Initializing database...$(RESET)"
+	$(VENV_PYTHON) scripts/upload_data.py init
+	@echo "$(GREEN)✅ Database initialized$(RESET)"
+
+reset-db: $(VENV_DIR) ## Reset database (WARNING: Deletes all data)
+	@echo "$(RED)⚠️  WARNING: This will delete all data!$(RESET)"
+	@read -p "Are you sure? Type 'yes' to continue: " confirm && [ "$$confirm" = "yes" ] || exit 1
+	$(VENV_PYTHON) scripts/upload_data.py reset
+	@echo "$(GREEN)✅ Database reset$(RESET)"
+
+upload-users: $(VENV_DIR) ## Upload users from CSV file (usage: make upload-users FILE=path/to/users.csv)
+	@echo "$(BLUE)👥 Uploading users data...$(RESET)"
+	$(VENV_PYTHON) scripts/upload_data.py upload $(FILE) users
+	@echo "$(GREEN)✅ Users uploaded$(RESET)"
+
+upload-players: $(VENV_DIR) ## Upload players from CSV file (usage: make upload-players FILE=path/to/players.csv)
+	@echo "$(BLUE)🏃 Uploading players data...$(RESET)"
+	$(VENV_PYTHON) scripts/upload_data.py upload $(FILE) players
+	@echo "$(GREEN)✅ Players uploaded$(RESET)"
+
+upload-teams: $(VENV_DIR) ## Upload teams from CSV file (usage: make upload-teams FILE=path/to/teams.csv)
+	@echo "$(BLUE)🏆 Uploading teams data...$(RESET)"
+	$(VENV_PYTHON) scripts/upload_data.py upload $(FILE) teams
+	@echo "$(GREEN)✅ Teams uploaded$(RESET)"
+
+backup-db: ## Backup database file
+	@echo "$(BLUE)💾 Creating database backup...$(RESET)"
+	cp $(DB_FILE) $(DB_FILE).backup.$(shell date +%Y%m%d_%H%M%S)
+	@echo "$(GREEN)✅ Database backed up$(RESET)"
+
+restore-db: ## Restore database from backup (usage: make restore-db BACKUP=auction.db.backup.20231201_120000)
+	@echo "$(BLUE)🔄 Restoring database...$(RESET)"
+	cp $(BACKUP) $(DB_FILE)
+	@echo "$(GREEN)✅ Database restored$(RESET)"
+
+export-data: $(VENV_DIR) ## Export all data to CSV files
+	@echo "$(BLUE)📤 Exporting data...$(RESET)"
+	mkdir -p exports
+	$(VENV_PYTHON) -c "\
+import sys; \
+sys.path.append('src'); \
+from src.core.database import DatabaseManager; \
+db = DatabaseManager(); \
+db.load_users_dataframe().to_csv('exports/users_export.csv', index=False); \
+db.load_players_dataframe().to_csv('exports/players_export.csv', index=False); \
+db.load_teams_dataframe().to_csv('exports/teams_export.csv', index=False); \
+print('Data exported to exports/ directory')"
+	@echo "$(GREEN)✅ Data exported$(RESET)"
+
+# Deployment Commands
+docker-build: ## Build Docker image
+	@echo "$(BLUE)🐳 Building Docker image...$(RESET)"
+	docker build -t badminton-auction .
+	@echo "$(GREEN)✅ Docker image built$(RESET)"
+
+docker-run: ## Run application in Docker container
+	@echo "$(BLUE)🐳 Running Docker container...$(RESET)"
+	docker run -p $(PORT):$(PORT) -v $(PWD)/data:/app/data badminton-auction
+	@echo "$(GREEN)✅ Docker container started$(RESET)"
+
+deploy: ## Deploy to production server (customize for your needs)
+	@echo "$(BLUE)🚀 Deploying to production...$(RESET)"
+	@echo "$(YELLOW)⚠️  Customize this target for your deployment process$(RESET)"
+	# Add your deployment commands here
+	@echo "$(GREEN)✅ Deployment completed$(RESET)"
+
+production-setup: ## Setup for production environment
+	@echo "$(BLUE)🏭 Setting up production environment...$(RESET)"
+	$(MAKE) install
+	$(MAKE) init-db
+	@echo "$(YELLOW)Remember to:$(RESET)"
+	@echo "  - Change default passwords"
+	@echo "  - Configure SSL/HTTPS"
+	@echo "  - Set up proper logging"
+	@echo "  - Configure firewall rules"
+	@echo "$(GREEN)✅ Production setup completed$(RESET)"
+
+# Utility Commands
+check-structure: ## Check project structure
+	@echo "$(BLUE)📁 Project Structure:$(RESET)"
+	$(VENV_PYTHON) scripts/show_structure.py
+
+show-structure: check-structure ## Alias for check-structure
+
+# Quick commands
+quick-start: setup run ## Quick start: setup and run the application
+
+quick-reset: reset-db init-db ## Quick reset: reset and reinitialize database
+
+quick-clean: clean setup ## Quick clean: clean and reinstall everything
+
+# Development workflow
+dev-workflow: install lint test ## Development workflow: install, lint, and test
+
+# Show system info
+info: ## Show system information
+	@echo "$(CYAN)System Information:$(RESET)"
+	@echo "Python version: $(shell $(PYTHON) --version)"
+	@echo "Current directory: $(shell pwd)"
+	@echo "Virtual environment: $(VENV_DIR)"
+	@echo "Database file: $(DB_FILE)"
+	@echo "Application file: $(APP_FILE)"
+	@echo "Port: $(PORT)"
+	@echo ""
+	@echo "$(CYAN)File Status:$(RESET)"
+	@echo "Virtual environment exists: $(shell [ -d $(VENV_DIR) ] && echo 'Yes' || echo 'No')"
+	@echo "Database exists: $(shell [ -f $(DB_FILE) ] && echo 'Yes' || echo 'No')"
+	@echo "Requirements file exists: $(shell [ -f $(REQUIREMENTS) ] && echo 'Yes' || echo 'No')"

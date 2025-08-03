@@ -11,22 +11,26 @@ import sys
 import traceback
 from pathlib import Path
 
+# Add src to Python path for imports
+sys.path.insert(0, str(Path(__file__).parent / "src"))
+
 # Import custom modules
-from database import DatabaseManager
-from auth import AuthManager
-from file_manager import FileUploadManager
-from ui_manager import UIManager
+from src.core.database import DatabaseManager
+from src.core.auth import AuthManager
+from src.utils.file_manager import FileUploadManager
+from src.ui.ui_manager import UIManager
+from config.settings import STREAMLIT_CONFIG, LOG_LEVEL, LOG_FORMAT
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=getattr(logging, LOG_LEVEL),
+    format=LOG_FORMAT
 )
 logger = logging.getLogger(__name__)
 
 # Page configuration
 st.set_page_config(
-    page_title="Badminton League Auction",
+    page_title="Badminton League Auction System",
     page_icon="🏸",
     layout="wide",
     initial_sidebar_state="expanded"
