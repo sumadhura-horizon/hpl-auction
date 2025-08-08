@@ -192,7 +192,7 @@ class UIManager:
                 
                 with price_col:
                     st.markdown("**💰 Base Price**")
-                    st.markdown(f"# ₹{player_details['base_price']:,}")
+                    st.markdown(f"### ₹{player_details['base_price']:,}")
                 
                 with category_col:
                     category = player_details.get('category', 'regular')
@@ -202,7 +202,7 @@ class UIManager:
                         'regular': '🔵'
                     }
                     st.markdown("**📊 Category**")
-                    st.markdown(f"# {category_color.get(category, '🔵')} {category.title()}")
+                    st.markdown(f"### {category_color.get(category, '🔵')} {category.title()}")
             
             # Add some spacing
             st.markdown("---")
