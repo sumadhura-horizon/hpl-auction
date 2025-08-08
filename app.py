@@ -59,8 +59,11 @@ class AuctionApp:
     def run(self):
         """Run the main application."""
         try:
+            # Check if we should show the login form (default behavior)
+            show_login = True
+            
             # Render UI components
-            self.ui_manager.render_sidebar()
+            self.ui_manager.render_sidebar(show_login_form=show_login)
             self._render_main_content()
             
         except Exception as e:
@@ -79,7 +82,7 @@ class AuctionApp:
         
         # Check if user is logged in
         if not self.auth_manager.is_logged_in():
-            self._render_welcome_page()
+            self._render_public_content()
             return
         
         # Load data
@@ -93,57 +96,112 @@ class AuctionApp:
         # Render tabs based on user role
         self._render_tabs(players_df, teams_df)
     
-    def _render_welcome_page(self):
-        """Render welcome page for non-logged-in users."""
-        st.markdown("---")
-        
-        col1, col2, col3 = st.columns([1, 2, 1])
-        
+    def _render_public_content(self):
+        """Render public content for non-logged-in users (captains, observers)."""
+        # Add main refresh button for public users
+        col1, col2 = st.columns([4, 1])
+        with col1:
+            st.markdown("👑 **Public Observer Mode** - Watch the live auction without logging in")
         with col2:
-            st.markdown("""
-            ### Welcome to the Badminton League Auction System! 🏸
-            
-            This platform allows you to:
-            - 👥 **Manage Players**: View and auction players
-            - 🏆 **Track Teams**: Monitor team rosters and budgets
-            - 💰 **Handle Auctions**: Conduct live player auctions
-            - 📊 **Generate Reports**: Download player and team data
-            
-            **Please log in to access the auction system.**
-            
-            #### User Roles:
-            - **Admin**: Full system access including data management
-            - **Auctioneer**: Can conduct auctions and manage player assignments
-            - **Owner**: View-only access to teams and players
-            """)
+            if st.button("🔄 Refresh All", help="Refresh all auction data", key="main_public_refresh", type="primary"):
+                st.rerun()
         
-        # Display some basic stats if data is available
+        # Add navigation tabs for public users
+        tab_names = ["📺 Live Auction", "🏆 Teams", "👤 Players", "ℹ️ About"]
+        tabs = st.tabs(tab_names)
+        
         try:
+            # Load data for public view
             players_df = self.db_manager.load_players_dataframe()
             teams_df = self.db_manager.load_teams_dataframe()
             
-            if not players_df.empty and not teams_df.empty:
-                st.markdown("---")
-                st.subheader("📊 Quick Stats")
-                
-                col1, col2, col3, col4 = st.columns(4)
-                
-                with col1:
-                    st.metric("Total Players", len(players_df))
-                
-                with col2:
-                    st.metric("Total Teams", len(teams_df))
-                
-                with col3:
-                    auctioned_count = len(players_df[players_df["owner"].notnull()])
-                    st.metric("Players Auctioned", auctioned_count)
-                
-                with col4:
-                    unauctioned_count = len(players_df[players_df["owner"].isnull()])
-                    st.metric("Players Available", unauctioned_count)
+            with tabs[0]:
+                if not players_df.empty and not teams_df.empty:
+                    # Show the observer interface without login
+                    self.ui_manager.render_observer_interface(players_df, teams_df)
+                else:
+                    st.warning("No auction data available yet.")
+            
+            with tabs[1]:
+                st.markdown("### 🏆 Team Overview")
+                if not players_df.empty and not teams_df.empty:
+                    self.ui_manager.render_teams_tab(players_df, teams_df)
+                else:
+                    st.info("Team information will appear here once the auction begins.")
+            
+            with tabs[2]:
+                st.markdown("### 👤 Player Information")
+                if not players_df.empty:
+                    # Create sub-tabs for different player views
+                    player_tabs = st.tabs(["Available", "Auctioned", "All Players"])
                     
+                    with player_tabs[0]:
+                        self.ui_manager.render_players_list_tab(players_df, "unauctioned")
+                    
+                    with player_tabs[1]:
+                        self.ui_manager.render_players_list_tab(players_df, "auctioned")
+                    
+                    with player_tabs[2]:
+                        self.ui_manager.render_players_list_tab(players_df, "all")
+                else:
+                    st.info("Player information will appear here once data is loaded.")
+            
+            with tabs[3]:
+                self._render_about_section(players_df, teams_df)
+                
         except Exception as e:
-            logger.error(f"Error displaying stats: {e}")
+            logger.error(f"Error loading public content: {e}")
+            st.error("Unable to load auction data. Please refresh the page.")
+    
+    def _render_about_section(self, players_df, teams_df):
+        """Render about section with system info."""
+        st.markdown("### Welcome to the Badminton League Auction System! 🏸")
+        
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            st.markdown("""
+            #### 👑 For Captains & Team Observers
+            
+            This public interface allows you to:
+            - 📺 **Watch Live Auction**: See current player being auctioned in real-time
+            - 🏆 **Monitor Teams**: Track team rosters, budgets, and player counts
+            - 👤 **View Players**: Browse available and auctioned players with details
+            - 💰 **Budget Tracking**: See remaining budgets and maximum bids per team
+            
+            **🔄 Auto-Refresh**: The page updates automatically when auctioneers make changes.
+            
+            ---
+            
+            #### 🔐 For Auctioneers & Admins
+            **Please log in using the sidebar** to access auction management features.
+            
+            **User Roles:**
+            - **Admin**: Full system access including data management
+            - **Auctioneer**: Conduct auctions and manage player assignments  
+            - **Owner**: View-only access to teams and players
+            """)
+        
+        with col2:
+            if not players_df.empty and not teams_df.empty:
+                st.markdown("#### 📊 Quick Stats")
+                
+                # Auction progress metrics
+                total_players = len(players_df)
+                auctioned_count = len(players_df[players_df["owner"].notnull()])
+                unauctioned_count = total_players - auctioned_count
+                
+                st.metric("Total Players", total_players)
+                st.metric("Auctioned", auctioned_count)
+                st.metric("Available", unauctioned_count)
+                st.metric("Teams", len(teams_df))
+                
+                # Progress bar
+                if total_players > 0:
+                    progress = auctioned_count / total_players
+                    st.progress(progress, f"Auction Progress: {progress:.1%}")
+            else:
+                st.info("📊 Stats will appear once auction data is loaded.")
     
     def _render_tabs(self, players_df, teams_df):
         """Render tabs based on user role."""
@@ -152,16 +210,56 @@ class AuctionApp:
         if user_role in ["admin", "auctioneer"]:
             tab_names = [
                 "🎯 Update Auction",
+                "👑 Captain Assignment",
                 "🏆 Teams", 
                 "👤 Available Players",
                 "✅ Auctioned Players",
                 "↩️ Undo Auction",
-                "📋 All Players"
+                "📋 All Players",
+                "📤 Player Management",
+                "📺 Observer View"
             ]
             tabs = st.tabs(tab_names)
             
             with tabs[0]:
                 self.ui_manager.render_update_auction_tab(players_df, teams_df)
+            
+            with tabs[1]:
+                self.ui_manager.render_captain_assignment_tab(players_df, teams_df)
+            
+            with tabs[2]:
+                self.ui_manager.render_teams_tab(players_df, teams_df)
+            
+            with tabs[3]:
+                self.ui_manager.render_players_list_tab(players_df, "unauctioned")
+            
+            with tabs[4]:
+                self.ui_manager.render_players_list_tab(players_df, "auctioned")
+            
+            with tabs[5]:
+                self.ui_manager.render_undo_auction_tab(players_df)
+            
+            with tabs[6]:
+                self.ui_manager.render_players_list_tab(players_df, "all")
+            
+            with tabs[7]:
+                self.ui_manager.render_player_upload_tab()
+            
+            with tabs[8]:
+                self.ui_manager.render_observer_interface(players_df, teams_df)
+        
+        else:  # owner or other roles
+            tab_names = [
+                "📺 Observer View",
+                "🏆 Teams",
+                "👤 Available Players", 
+                "✅ Auctioned Players",
+                "📋 All Players"
+            ]
+            tabs = st.tabs(tab_names)
+            
+            with tabs[0]:
+                self.ui_manager.render_observer_interface(players_df, teams_df)
             
             with tabs[1]:
                 self.ui_manager.render_teams_tab(players_df, teams_df)
@@ -173,30 +271,6 @@ class AuctionApp:
                 self.ui_manager.render_players_list_tab(players_df, "auctioned")
             
             with tabs[4]:
-                self.ui_manager.render_undo_auction_tab(players_df)
-            
-            with tabs[5]:
-                self.ui_manager.render_players_list_tab(players_df, "all")
-        
-        else:  # owner or other roles
-            tab_names = [
-                "🏆 Teams",
-                "👤 Available Players", 
-                "✅ Auctioned Players",
-                "📋 All Players"
-            ]
-            tabs = st.tabs(tab_names)
-            
-            with tabs[0]:
-                self.ui_manager.render_teams_tab(players_df, teams_df)
-            
-            with tabs[1]:
-                self.ui_manager.render_players_list_tab(players_df, "unauctioned")
-            
-            with tabs[2]:
-                self.ui_manager.render_players_list_tab(players_df, "auctioned")
-            
-            with tabs[3]:
                 self.ui_manager.render_players_list_tab(players_df, "all")
 
 

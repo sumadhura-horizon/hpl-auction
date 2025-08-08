@@ -1,0 +1,195 @@
+# HPL Auction System - macOS Setup Makefile
+
+# Variables
+PYTHON := python3
+VENV_DIR := .venv
+VENV_PYTHON := $(VENV_DIR)/bin/python
+PIP := $(VENV_DIR)/bin/pip
+STREAMLIT := $(VENV_DIR)/bin/streamlit
+APP_FILE := app.py
+PORT := 8501
+DB_NAME := hpl_auction
+
+# Colors
+GREEN := \033[0;32m
+YELLOW := \033[0;33m
+BLUE := \033[0;34m
+RED := \033[0;31m
+RESET := \033[0m
+
+# Default target
+.DEFAULT_GOAL := help
+
+.PHONY: help macos-setup setup-postgres install-postgres setup run clean init-db reset-db test info
+
+help: ## Show available commands
+	@echo "$(BLUE)🏸 HPL Auction System - macOS Setup$(RESET)"
+	@echo ""
+	@echo "$(YELLOW)Essential Commands:$(RESET)"
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-20s$(RESET) %s\n", $$1, $$2}'
+	@echo ""
+	@echo "$(YELLOW)Usage Examples:$(RESET)"
+	@echo "  make macos-setup   # Complete macOS development setup (ONE COMMAND!)"
+	@echo "  make setup         # App setup (after system dependencies)"
+	@echo "  make run           # Start the application"
+	@echo "  make clean         # Clean and start fresh"
+	@echo ""
+
+macos-setup: install-postgres setup-postgres $(VENV_DIR) install init-db ## Complete macOS development setup (ONE COMMAND!)
+	@echo "$(GREEN)🎉 macOS setup complete!$(RESET)"
+	@echo ""
+	@echo "$(YELLOW)Next steps:$(RESET)"
+	@echo "  1. Run: $(GREEN)make run$(RESET) to start the application"
+	@echo "  2. Open: $(BLUE)http://localhost:$(PORT)$(RESET)"
+	@echo "  3. Default login: admin/admin"
+	@echo ""
+	@echo "$(YELLOW)If you encounter database connection issues:$(RESET)"
+	@echo "  Run: $(GREEN)make fix-postgres-auth$(RESET)"
+	@echo ""
+
+install-postgres: ## Install PostgreSQL using Homebrew
+	@echo "$(BLUE)🍺 Installing PostgreSQL via Homebrew...$(RESET)"
+	@if ! command -v brew >/dev/null 2>&1; then \
+		echo "$(RED)❌ Homebrew not found. Installing Homebrew first...$(RESET)"; \
+		/bin/bash -c "$$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"; \
+	fi
+	@if ! brew list postgresql@15 >/dev/null 2>&1; then \
+		brew install postgresql@15; \
+		brew services start postgresql@15; \
+	else \
+		echo "$(YELLOW)⚠️  PostgreSQL already installed$(RESET)"; \
+		brew services start postgresql@15 || true; \
+	fi
+	@echo "$(GREEN)✅ PostgreSQL installed and started$(RESET)"
+
+setup-postgres: ## Setup PostgreSQL database and user
+	@echo "$(BLUE)🗄️  Setting up PostgreSQL database...$(RESET)"
+	@# Wait a moment for PostgreSQL to be ready
+	@sleep 2
+	@# Get current user for database operations
+	@CURRENT_USER=$$(whoami); \
+	echo "Setting up database as user: $$CURRENT_USER"; \
+	createdb $(DB_NAME) 2>/dev/null || echo "$(YELLOW)⚠️  Database $(DB_NAME) may already exist$(RESET)"; \
+	psql -d $(DB_NAME) -c "CREATE USER postgres WITH PASSWORD 'postgres' CREATEDB SUPERUSER;" 2>/dev/null || echo "$(YELLOW)⚠️  User postgres may already exist$(RESET)"; \
+	psql -d $(DB_NAME) -c "GRANT ALL PRIVILEGES ON DATABASE $(DB_NAME) TO postgres;" 2>/dev/null || true; \
+	psql -d $(DB_NAME) -c "GRANT ALL PRIVILEGES ON DATABASE $(DB_NAME) TO $$CURRENT_USER;" 2>/dev/null || true
+	@echo "$(GREEN)✅ PostgreSQL database setup complete$(RESET)"
+
+$(VENV_DIR): ## Create virtual environment
+	@echo "$(BLUE)🐍 Creating virtual environment...$(RESET)"
+	$(PYTHON) -m venv $(VENV_DIR)
+
+install: $(VENV_DIR) ## Install Python dependencies
+	@echo "$(BLUE)📦 Installing Python dependencies...$(RESET)"
+	$(PIP) install --upgrade pip
+	$(PIP) install -r requirements.txt
+	@echo "$(GREEN)✅ Dependencies installed$(RESET)"
+
+setup: $(VENV_DIR) install init-db ## Complete application setup (after system dependencies)
+	@echo "$(GREEN)✅ Application setup complete!$(RESET)"
+
+run: $(VENV_DIR) ## Start the application
+	@echo "$(BLUE)🚀 Starting HPL Auction System on http://localhost:$(PORT)$(RESET)"
+	@echo "$(YELLOW)Press Ctrl+C to stop$(RESET)"
+	@echo ""
+	@echo "$(BLUE)Default credentials:$(RESET)"
+	@echo "  Username: admin"
+	@echo "  Password: admin"
+	@echo ""
+	@export DB_HOST=localhost && \
+	export DB_PORT=5432 && \
+	export DB_NAME=$(DB_NAME) && \
+	export DB_USER=postgres && \
+	export DB_PASSWORD=postgres && \
+	$(STREAMLIT) run $(APP_FILE) --server.port $(PORT)
+
+init-db: $(VENV_DIR) ## Initialize database with sample data
+	@echo "$(BLUE)📊 Initializing database...$(RESET)"
+	@export DB_HOST=localhost && \
+	export DB_PORT=5432 && \
+	export DB_NAME=$(DB_NAME) && \
+	export DB_USER=postgres && \
+	export DB_PASSWORD=postgres && \
+	cd $(shell pwd) && $(VENV_PYTHON) scripts/upload_data.py init
+	@echo "$(GREEN)✅ Database initialized$(RESET)"
+
+reset-db: $(VENV_DIR) ## Reset database (deletes all data!)
+	@echo "$(YELLOW)⚠️  This will delete all auction data!$(RESET)"
+	@read -p "Continue? (y/N): " confirm && [ "$$confirm" = "y" ] || exit 1
+	@export DB_HOST=localhost && \
+	export DB_PORT=5432 && \
+	export DB_NAME=$(DB_NAME) && \
+	export DB_USER=postgres && \
+	export DB_PASSWORD=postgres && \
+	cd $(shell pwd) && $(VENV_PYTHON) scripts/upload_data.py reset
+	@echo "$(GREEN)✅ Database reset$(RESET)"
+
+test: $(VENV_DIR) ## Test the application setup
+	@echo "$(BLUE)🧪 Testing application setup...$(RESET)"
+	@export DB_HOST=localhost && \
+	export DB_PORT=5432 && \
+	export DB_NAME=$(DB_NAME) && \
+	export DB_USER=postgres && \
+	export DB_PASSWORD=postgres && \
+	$(VENV_PYTHON) -c "from app import AuctionApp; print('✅ App can be imported'); app = AuctionApp(); print('✅ App initializes correctly')"
+
+clean: ## Remove virtual environment and start fresh
+	@echo "$(YELLOW)🧹 Cleaning up application...$(RESET)"
+	rm -rf $(VENV_DIR)
+	rm -rf __pycache__ src/__pycache__ src/*/__pycache__
+	find . -name "*.pyc" -delete
+	@echo "$(GREEN)✅ Application cleaned up$(RESET)"
+
+clean-all: ## Remove virtual environment and reset database (WARNING: Deletes all data!)
+	@echo "$(RED)⚠️  This will clean the application AND reset the database (deletes all auction data)!$(RESET)"
+	@read -p "Continue? (y/N): " confirm && [ "$$confirm" = "y" ] || exit 1
+	@echo "$(YELLOW)🧹 Cleaning up application...$(RESET)"
+	rm -rf $(VENV_DIR)
+	rm -rf __pycache__ src/__pycache__ src/*/__pycache__
+	find . -name "*.pyc" -delete
+	@echo "$(YELLOW)🗄️  Resetting database...$(RESET)"
+	@export DB_HOST=localhost && \
+	export DB_PORT=5432 && \
+	export DB_NAME=$(DB_NAME) && \
+	export DB_USER=postgres && \
+	export DB_PASSWORD=postgres && \
+	psql -d $(DB_NAME) -c "DROP TABLE IF EXISTS players CASCADE; DROP TABLE IF EXISTS teams CASCADE; DROP TABLE IF EXISTS users CASCADE;" 2>/dev/null || true
+	@echo "$(GREEN)✅ Complete cleanup finished! Run 'make macos-setup' to start fresh$(RESET)"
+
+info: ## Show system information
+	@echo "$(BLUE)📋 macOS System Info:$(RESET)"
+	@echo "Python: $(shell $(PYTHON) --version 2>/dev/null || echo 'Not found')"
+	@echo "Virtual env: $(shell [ -d $(VENV_DIR) ] && echo 'Exists' || echo 'Missing')"
+	@echo "PostgreSQL: $(shell brew list postgresql@15 >/dev/null 2>&1 && echo 'Installed' || echo 'Missing')"
+	@echo "Database: $(shell psql -d $(DB_NAME) -c '\q' 2>/dev/null && echo 'Accessible' || echo 'Not accessible')"
+	@echo "Port: $(PORT)"
+
+# Troubleshooting targets
+postgres-status: ## Check PostgreSQL service status
+	@echo "$(BLUE)🔍 PostgreSQL Status:$(RESET)"
+	@brew services list | grep postgresql || echo "$(RED)PostgreSQL service not found$(RESET)"
+
+postgres-start: ## Start PostgreSQL service
+	@echo "$(BLUE)▶️  Starting PostgreSQL...$(RESET)"
+	brew services start postgresql@15
+
+postgres-stop: ## Stop PostgreSQL service
+	@echo "$(BLUE)⏹️  Stopping PostgreSQL...$(RESET)"
+	brew services stop postgresql@15
+
+postgres-restart: ## Restart PostgreSQL service
+	@echo "$(BLUE)🔄 Restarting PostgreSQL...$(RESET)"
+	brew services restart postgresql@15
+
+db-connect: ## Connect to database using psql
+	@echo "$(BLUE)🔌 Connecting to database...$(RESET)"
+	@psql -d $(DB_NAME) 2>/dev/null || psql -d $(DB_NAME) -U postgres 2>/dev/null || psql -d $(DB_NAME) -U $$(whoami)
+
+# Database troubleshooting
+fix-postgres-auth: ## Fix PostgreSQL authentication issues
+	@echo "$(BLUE)🔧 Fixing PostgreSQL authentication...$(RESET)"
+	@echo "Creating postgres superuser and database..."
+	@CURRENT_USER=$$(whoami); \
+	createuser -s postgres 2>/dev/null || echo "User postgres exists"; \
+	createdb $(DB_NAME) -O postgres 2>/dev/null || echo "Database exists"; \
+	psql -d $(DB_NAME) -c "ALTER USER postgres WITH PASSWORD 'postgres';" || true

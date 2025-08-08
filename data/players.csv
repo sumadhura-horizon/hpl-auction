@@ -1,6 +1,37 @@
-name,base_price
-Player 1,100000
-Player 2,100000
-Player 3,100000
-Player 4,100000
-Player 5,100000
+name,base_price,category,photo_url
+Captain Alpha,0,captain,
+Captain Beta,0,captain,
+Captain Gamma,0,captain,
+Captain Delta,0,captain,
+Marquee Star 1,1000000,marquee,
+Marquee Star 2,1000000,marquee,
+Marquee Star 3,1000000,marquee,
+Marquee Star 4,1000000,marquee,
+Marquee Star 5,1000000,marquee,
+Marquee Star 6,1000000,marquee,
+Marquee Star 7,1000000,marquee,
+Marquee Star 8,1000000,marquee,
+Marquee Star 9,1000000,marquee,
+Marquee Star 10,1000000,marquee,
+Marquee Star 11,1000000,marquee,
+Marquee Star 12,1000000,marquee,
+Regular Player 1,200000,regular,
+Regular Player 2,200000,regular,
+Regular Player 3,200000,regular,
+Regular Player 4,200000,regular,
+Regular Player 5,200000,regular,
+Regular Player 6,200000,regular,
+Regular Player 7,200000,regular,
+Regular Player 8,200000,regular,
+Regular Player 9,200000,regular,
+Regular Player 10,200000,regular,
+Regular Player 11,200000,regular,
+Regular Player 12,200000,regular,
+Regular Player 13,200000,regular,
+Regular Player 14,200000,regular,
+Regular Player 15,200000,regular,
+Regular Player 16,200000,regular,
+Regular Player 17,200000,regular,
+Regular Player 18,200000,regular,
+Regular Player 19,200000,regular,
+Regular Player 20,200000,regular

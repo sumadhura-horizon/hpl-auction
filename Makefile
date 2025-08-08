@@ -1,80 +1,131 @@
-# Badminton League Auction System - Simplified Makefile
-
-# Variables
-PYTHON := python3
-VENV_DIR := .venv
-VENV_PYTHON := $(VENV_DIR)/bin/python
-PIP := $(VENV_DIR)/bin/pip
-STREAMLIT := $(VENV_DIR)/bin/streamlit
-APP_FILE := app.py
-PORT := 8501
+# HPL Auction System - Platform Dispatcher Makefile
 
 # Colors
 GREEN := \033[0;32m
 YELLOW := \033[0;33m
 BLUE := \033[0;34m
+RED := \033[0;31m
 RESET := \033[0m
+
+# Detect platform
+UNAME_S := $(shell uname -s)
+IS_MACOS := $(shell [ "$(UNAME_S)" = "Darwin" ] && echo true || echo false)
+IS_LINUX := $(shell [ "$(UNAME_S)" = "Linux" ] && echo true || echo false)
+IS_UBUNTU := $(shell [ -f /etc/lsb-release ] && grep -q "Ubuntu" /etc/lsb-release && echo true || echo false)
 
 # Default target
 .DEFAULT_GOAL := help
 
-.PHONY: help setup run clean init-db reset-db test info
+.PHONY: help macos-setup ubuntu-setup setup run clean info
 
 help: ## Show available commands
-	@echo "$(BLUE)🏸 Badminton League Auction System$(RESET)"
+	@echo "$(BLUE)🏸 HPL Auction System$(RESET)"
 	@echo ""
-	@echo "$(YELLOW)Essential Commands:$(RESET)"
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-15s$(RESET) %s\n", $$1, $$2}'
+	@echo "$(YELLOW)Platform: $(shell uname -s)$(RESET)"
 	@echo ""
-	@echo "$(YELLOW)Usage Examples:$(RESET)"
-	@echo "  make setup     # First time setup"
-	@echo "  make run       # Start the application"
-	@echo "  make clean     # Clean and start fresh"
+	@echo "$(YELLOW)Quick Setup Commands:$(RESET)"
+	@if [ "$(IS_MACOS)" = "true" ]; then \
+		echo "  $(GREEN)make macos-setup$(RESET)   # Complete macOS development setup (ONE COMMAND!)"; \
+	elif [ "$(IS_UBUNTU)" = "true" ]; then \
+		echo "  $(GREEN)make ubuntu-setup$(RESET)  # Complete Ubuntu server setup (ONE COMMAND!)"; \
+	else \
+		echo "  $(YELLOW)Platform not detected. Use platform-specific commands:$(RESET)"; \
+		echo "  $(GREEN)make -f Makefile.macos macos-setup$(RESET)   # For macOS"; \
+		echo "  $(GREEN)make -f Makefile.ubuntu ubuntu-setup$(RESET) # For Ubuntu"; \
+	fi
+	@echo ""
+	@echo "$(YELLOW)Other Commands:$(RESET)"
+	@echo "  $(GREEN)make setup$(RESET)         # Application setup only (after system dependencies)"
+	@echo "  $(GREEN)make run$(RESET)           # Start the application"
+	@echo "  $(GREEN)make clean$(RESET)         # Clean application only"
+	@echo "  $(GREEN)make clean-all$(RESET)     # Clean application and reset database (⚠️  DELETES ALL DATA!)"
+	@echo "  $(GREEN)make info$(RESET)          # Show system information"
+	@echo ""
+	@echo "$(YELLOW)Platform-Specific Commands:$(RESET)"
+	@echo "  $(GREEN)make -f Makefile.macos help$(RESET)   # macOS commands"
+	@echo "  $(GREEN)make -f Makefile.ubuntu help$(RESET)  # Ubuntu commands"
 	@echo ""
 
-setup: $(VENV_DIR) install init-db ## Complete setup (run this first)
-	@echo "$(GREEN)✅ Setup complete! Run 'make run' to start.$(RESET)"
+macos-setup: ## Complete macOS development setup
+	@if [ "$(IS_MACOS)" = "true" ]; then \
+		$(MAKE) -f Makefile.macos macos-setup; \
+	else \
+		echo "$(RED)❌ This is not a macOS system$(RESET)"; \
+		exit 1; \
+	fi
 
-$(VENV_DIR): ## Create virtual environment
-	@echo "$(BLUE)🔧 Creating virtual environment...$(RESET)"
-	$(PYTHON) -m venv $(VENV_DIR)
+ubuntu-setup: ## Complete Ubuntu server setup
+	@if [ "$(IS_UBUNTU)" = "true" ]; then \
+		$(MAKE) -f Makefile.ubuntu ubuntu-setup; \
+	else \
+		echo "$(RED)❌ This is not an Ubuntu system$(RESET)"; \
+		exit 1; \
+	fi
 
-install: $(VENV_DIR) ## Install dependencies
-	@echo "$(BLUE)📦 Installing dependencies...$(RESET)"
-	$(PIP) install --upgrade pip
-	$(PIP) install -r requirements.txt
-	@echo "$(GREEN)✅ Dependencies installed$(RESET)"
+setup: ## Application setup (after system dependencies)
+	@if [ "$(IS_MACOS)" = "true" ]; then \
+		$(MAKE) -f Makefile.macos setup; \
+	elif [ "$(IS_UBUNTU)" = "true" ]; then \
+		$(MAKE) -f Makefile.ubuntu setup; \
+	else \
+		echo "$(RED)❌ Platform not supported automatically$(RESET)"; \
+		echo "$(YELLOW)Use: make -f Makefile.macos setup (for macOS)$(RESET)"; \
+		echo "$(YELLOW)Use: make -f Makefile.ubuntu setup (for Ubuntu)$(RESET)"; \
+		exit 1; \
+	fi
 
-run: $(VENV_DIR) ## Start the application
-	@echo "$(BLUE)🚀 Starting application on http://localhost:$(PORT)$(RESET)"
-	@echo "$(YELLOW)Press Ctrl+C to stop$(RESET)"
-	$(STREAMLIT) run $(APP_FILE) --server.port $(PORT)
-
-init-db: $(VENV_DIR) ## Initialize database with sample data
-	@echo "$(BLUE)📊 Initializing database...$(RESET)"
-	cd $(shell pwd) && $(VENV_PYTHON) scripts/upload_data.py init
-	@echo "$(GREEN)✅ Database initialized$(RESET)"
-
-reset-db: $(VENV_DIR) ## Reset database (deletes all data!)
-	@echo "$(YELLOW)⚠️  This will delete all auction data!$(RESET)"
-	@read -p "Continue? (y/N): " confirm && [ "$$confirm" = "y" ] || exit 1
-	cd $(shell pwd) && $(VENV_PYTHON) scripts/upload_data.py reset
-	@echo "$(GREEN)✅ Database reset$(RESET)"
-
-test: $(VENV_DIR) ## Test the application
-	@echo "$(BLUE)🧪 Testing application...$(RESET)"
-	$(VENV_PYTHON) -c "from app import AuctionApp; print('✅ App can be imported'); app = AuctionApp(); print('✅ App initializes correctly')"
+run: ## Start the application
+	@if [ "$(IS_MACOS)" = "true" ]; then \
+		$(MAKE) -f Makefile.macos run; \
+	elif [ "$(IS_UBUNTU)" = "true" ]; then \
+		$(MAKE) -f Makefile.ubuntu run; \
+	else \
+		echo "$(RED)❌ Platform not supported automatically$(RESET)"; \
+		echo "$(YELLOW)Use: make -f Makefile.macos run (for macOS)$(RESET)"; \
+		echo "$(YELLOW)Use: make -f Makefile.ubuntu run (for Ubuntu)$(RESET)"; \
+		exit 1; \
+	fi
 
 clean: ## Remove virtual environment and start fresh
-	@echo "$(YELLOW)🧹 Cleaning up...$(RESET)"
-	rm -rf $(VENV_DIR)
-	rm -rf __pycache__ src/__pycache__ src/*/__pycache__
-	find . -name "*.pyc" -delete
-	@echo "$(GREEN)✅ Cleaned up$(RESET)"
+	@if [ "$(IS_MACOS)" = "true" ]; then \
+		$(MAKE) -f Makefile.macos clean; \
+	elif [ "$(IS_UBUNTU)" = "true" ]; then \
+		$(MAKE) -f Makefile.ubuntu clean; \
+	else \
+		echo "$(YELLOW)🧹 Cleaning up (generic)...$(RESET)"; \
+		rm -rf .venv; \
+		rm -rf __pycache__ src/__pycache__ src/*/__pycache__; \
+		find . -name "*.pyc" -delete; \
+		echo "$(GREEN)✅ Cleaned up$(RESET)"; \
+	fi
 
 info: ## Show system information
-	@echo "$(BLUE)📋 System Info:$(RESET)"
-	@echo "Python: $(shell $(PYTHON) --version 2>/dev/null || echo 'Not found')"
-	@echo "Virtual env: $(shell [ -d $(VENV_DIR) ] && echo 'Exists' || echo 'Missing')"
-	@echo "Database: $(shell [ -f auction.db ] && echo 'Exists' || echo 'Missing')"
-	@echo "Port: $(PORT)"
+	@echo "$(BLUE)📋 System Information:$(RESET)"
+	@echo "OS: $(shell uname -s)"
+	@if [ "$(IS_UBUNTU)" = "true" ]; then \
+		echo "Distribution: $(shell lsb_release -d 2>/dev/null | cut -f2 || echo 'Unknown')"; \
+	elif [ "$(IS_MACOS)" = "true" ]; then \
+		echo "Version: $(shell sw_vers -productVersion 2>/dev/null || echo 'Unknown')"; \
+	fi
+	@echo "Platform detected: $(if $(IS_MACOS),macOS,$(if $(IS_UBUNTU),Ubuntu,Unknown))"
+	@echo ""
+	@if [ "$(IS_MACOS)" = "true" ]; then \
+		$(MAKE) -f Makefile.macos info; \
+	elif [ "$(IS_UBUNTU)" = "true" ]; then \
+		$(MAKE) -f Makefile.ubuntu info; \
+	else \
+		echo "$(YELLOW)Use platform-specific Makefiles for detailed info$(RESET)"; \
+	fi
+
+# Direct delegation targets
+init-db reset-db test postgres-status postgres-start postgres-stop postgres-restart fix-postgres-auth clean-all:
+	@if [ "$(IS_MACOS)" = "true" ]; then \
+		$(MAKE) -f Makefile.macos $@; \
+	elif [ "$(IS_UBUNTU)" = "true" ]; then \
+		$(MAKE) -f Makefile.ubuntu $@; \
+	else \
+		echo "$(RED)❌ Platform not supported automatically for target: $@$(RESET)"; \
+		echo "$(YELLOW)Use: make -f Makefile.macos $@ (for macOS)$(RESET)"; \
+		echo "$(YELLOW)Use: make -f Makefile.ubuntu $@ (for Ubuntu)$(RESET)"; \
+		exit 1; \
+	fi

@@ -1,0 +1,238 @@
+# HPL Auction System - Ubuntu Server Setup Makefile
+
+# Variables
+PYTHON := python3
+VENV_DIR := .venv
+VENV_PYTHON := $(VENV_DIR)/bin/python
+PIP := $(VENV_DIR)/bin/pip
+STREAMLIT := $(VENV_DIR)/bin/streamlit
+APP_FILE := app.py
+PORT := 8501
+DB_NAME := hpl_auction
+
+# Colors
+GREEN := \033[0;32m
+YELLOW := \033[0;33m
+BLUE := \033[0;34m
+RED := \033[0;31m
+RESET := \033[0m
+
+# Default target
+.DEFAULT_GOAL := help
+
+.PHONY: help ubuntu-setup install-system-deps setup-postgres install setup run clean init-db reset-db test info
+
+help: ## Show available commands
+	@echo "$(BLUE)🏸 HPL Auction System - Ubuntu Server Setup$(RESET)"
+	@echo ""
+	@echo "$(YELLOW)Essential Commands:$(RESET)"
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-20s$(RESET) %s\n", $$1, $$2}'
+	@echo ""
+	@echo "$(YELLOW)Usage Examples:$(RESET)"
+	@echo "  make ubuntu-setup  # Complete Ubuntu server setup (ONE COMMAND!)"
+	@echo "  make setup         # App setup (after system dependencies)"
+	@echo "  make run           # Start the application"
+	@echo "  make clean         # Clean and start fresh"
+	@echo ""
+
+ubuntu-setup: install-system-deps setup-postgres $(VENV_DIR) install init-db ## Complete Ubuntu server setup (ONE COMMAND!)
+	@echo "$(GREEN)🎉 Ubuntu setup complete!$(RESET)"
+	@echo ""
+	@echo "$(YELLOW)Next steps:$(RESET)"
+	@echo "  1. Run: $(GREEN)make run$(RESET) to start the application"
+	@echo "  2. Open: $(BLUE)http://localhost:$(PORT)$(RESET)"
+	@echo "  3. Default login: admin/admin"
+	@echo ""
+
+install-system-deps: ## Install system dependencies (Python, PostgreSQL, etc.)
+	@echo "$(BLUE)📦 Installing system dependencies...$(RESET)"
+	@# Update package list
+	sudo apt-get update
+	@# Install Python 3, pip, venv, and PostgreSQL
+	sudo apt-get install -y \
+		python3 \
+		python3-pip \
+		python3-venv \
+		python3-dev \
+		postgresql \
+		postgresql-contrib \
+		libpq-dev \
+		build-essential \
+		curl
+	@echo "$(GREEN)✅ System dependencies installed$(RESET)"
+
+setup-postgres: ## Setup PostgreSQL database and user
+	@echo "$(BLUE)🗄️  Setting up PostgreSQL database...$(RESET)"
+	@# Start PostgreSQL service
+	sudo systemctl start postgresql
+	sudo systemctl enable postgresql
+	@# Wait a moment for PostgreSQL to be ready
+	@sleep 3
+	@# Set postgres user password and create database
+	sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'postgres';" || echo "$(YELLOW)⚠️  Password may already be set$(RESET)"
+	sudo -u postgres createdb $(DB_NAME) || echo "$(YELLOW)⚠️  Database $(DB_NAME) may already exist$(RESET)"
+	sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE $(DB_NAME) TO postgres;" || true
+	@echo "$(GREEN)✅ PostgreSQL database setup complete$(RESET)"
+
+$(VENV_DIR): ## Create virtual environment
+	@echo "$(BLUE)🐍 Creating virtual environment...$(RESET)"
+	$(PYTHON) -m venv $(VENV_DIR)
+
+install: $(VENV_DIR) ## Install Python dependencies
+	@echo "$(BLUE)📦 Installing Python dependencies...$(RESET)"
+	$(PIP) install --upgrade pip
+	$(PIP) install -r requirements.txt
+	@echo "$(GREEN)✅ Dependencies installed$(RESET)"
+
+setup: $(VENV_DIR) install init-db ## Complete application setup (after system dependencies)
+	@echo "$(GREEN)✅ Application setup complete!$(RESET)"
+
+run: $(VENV_DIR) ## Start the application
+	@echo "$(BLUE)🚀 Starting HPL Auction System on http://localhost:$(PORT)$(RESET)"
+	@echo "$(YELLOW)Press Ctrl+C to stop$(RESET)"
+	@echo ""
+	@echo "$(BLUE)Default credentials:$(RESET)"
+	@echo "  Username: admin"
+	@echo "  Password: admin"
+	@echo ""
+	@export DB_HOST=localhost && \
+	export DB_PORT=5432 && \
+	export DB_NAME=$(DB_NAME) && \
+	export DB_USER=postgres && \
+	export DB_PASSWORD=postgres && \
+	$(STREAMLIT) run $(APP_FILE) --server.port $(PORT) --server.address 0.0.0.0
+
+run-production: $(VENV_DIR) ## Start the application for production (binds to all interfaces)
+	@echo "$(BLUE)🚀 Starting HPL Auction System in production mode$(RESET)"
+	@echo "$(YELLOW)Access at: http://YOUR_SERVER_IP:$(PORT)$(RESET)"
+	@export DB_HOST=localhost && \
+	export DB_PORT=5432 && \
+	export DB_NAME=$(DB_NAME) && \
+	export DB_USER=postgres && \
+	export DB_PASSWORD=postgres && \
+	$(STREAMLIT) run $(APP_FILE) --server.port $(PORT) --server.address 0.0.0.0 --server.headless true
+
+init-db: $(VENV_DIR) ## Initialize database with sample data
+	@echo "$(BLUE)📊 Initializing database...$(RESET)"
+	@export DB_HOST=localhost && \
+	export DB_PORT=5432 && \
+	export DB_NAME=$(DB_NAME) && \
+	export DB_USER=postgres && \
+	export DB_PASSWORD=postgres && \
+	cd $(shell pwd) && $(VENV_PYTHON) scripts/upload_data.py init
+	@echo "$(GREEN)✅ Database initialized$(RESET)"
+
+reset-db: $(VENV_DIR) ## Reset database (deletes all data!)
+	@echo "$(YELLOW)⚠️  This will delete all auction data!$(RESET)"
+	@read -p "Continue? (y/N): " confirm && [ "$$confirm" = "y" ] || exit 1
+	@export DB_HOST=localhost && \
+	export DB_PORT=5432 && \
+	export DB_NAME=$(DB_NAME) && \
+	export DB_USER=postgres && \
+	export DB_PASSWORD=postgres && \
+	cd $(shell pwd) && $(VENV_PYTHON) scripts/upload_data.py reset
+	@echo "$(GREEN)✅ Database reset$(RESET)"
+
+test: $(VENV_DIR) ## Test the application setup
+	@echo "$(BLUE)🧪 Testing application setup...$(RESET)"
+	@export DB_HOST=localhost && \
+	export DB_PORT=5432 && \
+	export DB_NAME=$(DB_NAME) && \
+	export DB_USER=postgres && \
+	export DB_PASSWORD=postgres && \
+	$(VENV_PYTHON) -c "from app import AuctionApp; print('✅ App can be imported'); app = AuctionApp(); print('✅ App initializes correctly')"
+
+clean: ## Remove virtual environment and start fresh
+	@echo "$(YELLOW)🧹 Cleaning up application...$(RESET)"
+	rm -rf $(VENV_DIR)
+	rm -rf __pycache__ src/__pycache__ src/*/__pycache__
+	find . -name "*.pyc" -delete
+	@echo "$(GREEN)✅ Application cleaned up$(RESET)"
+
+clean-all: ## Remove virtual environment and reset database (WARNING: Deletes all data!)
+	@echo "$(RED)⚠️  This will clean the application AND reset the database (deletes all auction data)!$(RESET)"
+	@read -p "Continue? (y/N): " confirm && [ "$$confirm" = "y" ] || exit 1
+	@echo "$(YELLOW)🧹 Cleaning up application...$(RESET)"
+	rm -rf $(VENV_DIR)
+	rm -rf __pycache__ src/__pycache__ src/*/__pycache__
+	find . -name "*.pyc" -delete
+	@echo "$(YELLOW)🗄️  Resetting database...$(RESET)"
+	@export DB_HOST=localhost && \
+	export DB_PORT=5432 && \
+	export DB_NAME=$(DB_NAME) && \
+	export DB_USER=postgres && \
+	export DB_PASSWORD=postgres && \
+	sudo -u postgres psql -d $(DB_NAME) -c "DROP TABLE IF EXISTS players CASCADE; DROP TABLE IF EXISTS teams CASCADE; DROP TABLE IF EXISTS users CASCADE;" 2>/dev/null || true
+	@echo "$(GREEN)✅ Complete cleanup finished! Run 'make ubuntu-setup' to start fresh$(RESET)"
+
+info: ## Show system information
+	@echo "$(BLUE)📋 Ubuntu System Info:$(RESET)"
+	@echo "OS: $(shell lsb_release -d 2>/dev/null | cut -f2 || echo 'Unknown')"
+	@echo "Python: $(shell $(PYTHON) --version 2>/dev/null || echo 'Not found')"
+	@echo "Virtual env: $(shell [ -d $(VENV_DIR) ] && echo 'Exists' || echo 'Missing')"
+	@echo "PostgreSQL: $(shell dpkg -l | grep -q postgresql && echo 'Installed' || echo 'Missing')"
+	@echo "Database: $(shell sudo -u postgres psql -d $(DB_NAME) -c '\q' 2>/dev/null && echo 'Accessible' || echo 'Not accessible')"
+	@echo "Port: $(PORT)"
+
+# Service management targets
+create-service: ## Create systemd service for the application
+	@echo "$(BLUE)⚙️  Creating systemd service...$(RESET)"
+	@sudo tee /etc/systemd/system/hpl-auction.service > /dev/null <<EOF
+[Unit]
+Description=HPL Auction System
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=$(USER)
+WorkingDirectory=$(shell pwd)
+Environment=DB_HOST=localhost
+Environment=DB_PORT=5432
+Environment=DB_NAME=$(DB_NAME)
+Environment=DB_USER=postgres
+Environment=DB_PASSWORD=postgres
+ExecStart=$(shell pwd)/$(STREAMLIT) run $(APP_FILE) --server.port $(PORT) --server.address 0.0.0.0 --server.headless true
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+	@sudo systemctl daemon-reload
+	@echo "$(GREEN)✅ Systemd service created$(RESET)"
+	@echo "$(YELLOW)Commands:$(RESET)"
+	@echo "  sudo systemctl start hpl-auction    # Start service"
+	@echo "  sudo systemctl stop hpl-auction     # Stop service"
+	@echo "  sudo systemctl enable hpl-auction   # Enable on boot"
+	@echo "  sudo systemctl status hpl-auction   # Check status"
+
+# Troubleshooting targets
+postgres-status: ## Check PostgreSQL service status
+	@echo "$(BLUE)🔍 PostgreSQL Status:$(RESET)"
+	@sudo systemctl status postgresql || echo "$(RED)PostgreSQL service not running$(RESET)"
+
+postgres-start: ## Start PostgreSQL service
+	@echo "$(BLUE)▶️  Starting PostgreSQL...$(RESET)"
+	sudo systemctl start postgresql
+
+postgres-stop: ## Stop PostgreSQL service
+	@echo "$(BLUE)⏹️  Stopping PostgreSQL...$(RESET)"
+	sudo systemctl stop postgresql
+
+postgres-restart: ## Restart PostgreSQL service
+	@echo "$(BLUE)🔄 Restarting PostgreSQL...$(RESET)"
+	sudo systemctl restart postgresql
+
+db-connect: ## Connect to database using psql
+	@echo "$(BLUE)🔌 Connecting to database...$(RESET)"
+	sudo -u postgres psql -d $(DB_NAME)
+
+# Firewall setup for server deployment
+setup-firewall: ## Setup UFW firewall for the application
+	@echo "$(BLUE)🔥 Setting up firewall...$(RESET)"
+	@sudo ufw allow ssh
+	@sudo ufw allow $(PORT)/tcp
+	@sudo ufw --force enable
+	@echo "$(GREEN)✅ Firewall configured$(RESET)"
+	@echo "$(YELLOW)Allowed ports: SSH (22), Application ($(PORT))$(RESET)"
