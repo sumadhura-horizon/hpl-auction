@@ -159,41 +159,53 @@ class UIManager:
     
     def display_player_details(self, player_details: pd.Series) -> None:
         """Display player details in a formatted way."""
-        col1, col2, col3 = st.columns([2, 1, 1])
-        
-        with col1:
-            # Display player photo or random avatar
-            if 'photo_url' in player_details and player_details['photo_url']:
-                try:
-                    st.image(player_details['photo_url'], width=150)
-                except:
+        # Create a container for better spacing
+        with st.container():
+            # First row: Player photo and name
+            col1, col2 = st.columns([1, 2])
+            
+            with col1:
+                # Display player photo or random avatar
+                if 'photo_url' in player_details and player_details['photo_url']:
+                    try:
+                        st.image(player_details['photo_url'], width=120)
+                    except:
+                        # Generate random avatar based on player name hash
+                        name_hash = hash(player_details['name']) % 100 + 1
+                        gender = "women" if name_hash % 2 == 0 else "men"
+                        avatar_id = (name_hash % 50) + 1  # Use IDs 1-50 for variety
+                        default_avatar = f"https://randomuser.me/api/portraits/{gender}/{avatar_id}.jpg"
+                        st.image(default_avatar, width=120)
+                else:
                     # Generate random avatar based on player name hash
                     name_hash = hash(player_details['name']) % 100 + 1
                     gender = "women" if name_hash % 2 == 0 else "men"
                     avatar_id = (name_hash % 50) + 1  # Use IDs 1-50 for variety
                     default_avatar = f"https://randomuser.me/api/portraits/{gender}/{avatar_id}.jpg"
-                    st.image(default_avatar, width=150)
-            else:
-                # Generate random avatar based on player name hash
-                name_hash = hash(player_details['name']) % 100 + 1
-                gender = "women" if name_hash % 2 == 0 else "men"
-                avatar_id = (name_hash % 50) + 1  # Use IDs 1-50 for variety
-                default_avatar = f"https://randomuser.me/api/portraits/{gender}/{avatar_id}.jpg"
-                st.image(default_avatar, width=150)
+                    st.image(default_avatar, width=120)
             
-            st.metric("Player Name", player_details['name'])
-        
-        with col2:
-            st.metric("Base Price", f"₹{player_details['base_price']:,}")
+            with col2:
+                st.markdown(f"### 👤 {player_details['name']}")
+                
+                # Second row: Base Price and Category in a more spacious layout
+                price_col, category_col = st.columns(2)
+                
+                with price_col:
+                    st.markdown("**💰 Base Price**")
+                    st.markdown(f"# ₹{player_details['base_price']:,}")
+                
+                with category_col:
+                    category = player_details.get('category', 'regular')
+                    category_color = {
+                        'captain': '🔴',
+                        'marquee': '🟡', 
+                        'regular': '🔵'
+                    }
+                    st.markdown("**📊 Category**")
+                    st.markdown(f"# {category_color.get(category, '🔵')} {category.title()}")
             
-        with col3:
-            category = player_details.get('category', 'regular')
-            category_color = {
-                'captain': '🔴',
-                'marquee': '🟡', 
-                'regular': '🔵'
-            }
-            st.metric("Category", f"{category_color.get(category, '🔵')} {category.title()}")
+            # Add some spacing
+            st.markdown("---")
     
     def display_team_players(self, team: str, players_df: pd.DataFrame) -> None:
         """Display players for a specific team."""
