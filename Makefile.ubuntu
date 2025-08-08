@@ -20,7 +20,7 @@ RESET := \033[0m
 # Default target
 .DEFAULT_GOAL := help
 
-.PHONY: help ubuntu-setup install-system-deps check-system setup-postgres install setup run clean init-db reset-db test info
+.PHONY: help ubuntu-setup install-system-deps check-system setup-postgres install setup run run-port80 clean init-db reset-db test info create-service create-service-port80
 
 help: ## Show available commands
 	@echo "$(BLUE)🏸 HPL Auction System - Ubuntu Server Setup$(RESET)"
@@ -224,6 +224,46 @@ create-service: ## Create systemd service for the application
 	@echo "  sudo systemctl stop hpl-auction     # Stop service"
 	@echo "  sudo systemctl enable hpl-auction   # Enable on boot"
 	@echo "  sudo systemctl status hpl-auction   # Check status"
+
+create-service-port80: ## Create systemd service for the application on port 80
+	@echo "$(BLUE)⚙️  Creating systemd service for port 80...$(RESET)"
+	@echo "[Unit]" | sudo tee /etc/systemd/system/hpl-auction.service > /dev/null
+	@echo "Description=HPL Auction System" | sudo tee -a /etc/systemd/system/hpl-auction.service > /dev/null
+	@echo "After=network.target postgresql.service" | sudo tee -a /etc/systemd/system/hpl-auction.service > /dev/null
+	@echo "Requires=postgresql.service" | sudo tee -a /etc/systemd/system/hpl-auction.service > /dev/null
+	@echo "" | sudo tee -a /etc/systemd/system/hpl-auction.service > /dev/null
+	@echo "[Service]" | sudo tee -a /etc/systemd/system/hpl-auction.service > /dev/null
+	@echo "Type=simple" | sudo tee -a /etc/systemd/system/hpl-auction.service > /dev/null
+	@echo "User=$(USER)" | sudo tee -a /etc/systemd/system/hpl-auction.service > /dev/null
+	@echo "WorkingDirectory=$(shell pwd)" | sudo tee -a /etc/systemd/system/hpl-auction.service > /dev/null
+	@echo "Environment=DB_HOST=localhost" | sudo tee -a /etc/systemd/system/hpl-auction.service > /dev/null
+	@echo "Environment=DB_PORT=5432" | sudo tee -a /etc/systemd/system/hpl-auction.service > /dev/null
+	@echo "Environment=DB_NAME=$(DB_NAME)" | sudo tee -a /etc/systemd/system/hpl-auction.service > /dev/null
+	@echo "Environment=DB_USER=postgres" | sudo tee -a /etc/systemd/system/hpl-auction.service > /dev/null
+	@echo "Environment=DB_PASSWORD=postgres" | sudo tee -a /etc/systemd/system/hpl-auction.service > /dev/null
+	@echo "ExecStart=$(shell pwd)/$(STREAMLIT) run $(APP_FILE) --server.port 80 --server.address 0.0.0.0 --server.headless true" | sudo tee -a /etc/systemd/system/hpl-auction.service > /dev/null
+	@echo "Restart=always" | sudo tee -a /etc/systemd/system/hpl-auction.service > /dev/null
+	@echo "RestartSec=3" | sudo tee -a /etc/systemd/system/hpl-auction.service > /dev/null
+	@echo "" | sudo tee -a /etc/systemd/system/hpl-auction.service > /dev/null
+	@echo "[Install]" | sudo tee -a /etc/systemd/system/hpl-auction.service > /dev/null
+	@echo "WantedBy=multi-user.target" | sudo tee -a /etc/systemd/system/hpl-auction.service > /dev/null
+	@sudo systemctl daemon-reload
+	@echo "$(GREEN)✅ Systemd service created for port 80$(RESET)"
+	@echo "$(YELLOW)Commands:$(RESET)"
+	@echo "  sudo systemctl start hpl-auction    # Start service"
+	@echo "  sudo systemctl stop hpl-auction     # Stop service"
+	@echo "  sudo systemctl enable hpl-auction   # Enable on boot"
+	@echo "  sudo systemctl status hpl-auction   # Check status"
+
+run-port80: $(VENV_DIR) ## Run the application on port 80 (requires sudo)
+	@echo "$(BLUE)🚀 Starting HPL Auction System on http://localhost:80$(RESET)"
+	@echo "$(RED)⚠️  Running on port 80 requires sudo privileges$(RESET)"
+	@export DB_HOST=localhost && \
+	export DB_PORT=5432 && \
+	export DB_NAME=$(DB_NAME) && \
+	export DB_USER=postgres && \
+	export DB_PASSWORD=postgres && \
+	sudo -E $(STREAMLIT) run $(APP_FILE) --server.port 80 --server.address 0.0.0.0 --server.headless true
 
 # Troubleshooting targets
 postgres-status: ## Check PostgreSQL service status
