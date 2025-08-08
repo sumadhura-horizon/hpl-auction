@@ -86,7 +86,10 @@ setup-postgres: ## Setup PostgreSQL database and user
 $(VENV_DIR): ## Create virtual environment
 	@echo "$(BLUE)🐍 Creating virtual environment...$(RESET)"
 	@echo "$(YELLOW)Running: $(PYTHON) -m venv $(VENV_DIR)$(RESET)"
+	@echo "$(YELLOW)Current directory: $(shell pwd)$(RESET)"
+	@echo "$(YELLOW)Checking if .venv already exists: $(shell ls -la .venv 2>/dev/null || echo 'Not found')$(RESET)"
 	$(PYTHON) -m venv $(VENV_DIR) || (echo "$(RED)❌ Virtual environment creation failed$(RESET)" && exit 1)
+	@echo "$(YELLOW)After creation: $(shell ls -la .venv/bin/ 2>/dev/null || echo 'bin directory not found')$(RESET)"
 	@echo "$(GREEN)✅ Virtual environment created$(RESET)"
 
 install: $(VENV_DIR) ## Install Python dependencies
@@ -95,7 +98,7 @@ install: $(VENV_DIR) ## Install Python dependencies
 		echo "$(RED)❌ Virtual environment not properly created - $(PIP) not found$(RESET)"; \
 		echo "$(YELLOW)Trying to recreate virtual environment...$(RESET)"; \
 		rm -rf $(VENV_DIR); \
-		$(MAKE) $(VENV_DIR); \
+		$(PYTHON) -m venv $(VENV_DIR) || (echo "$(RED)❌ Failed to recreate virtual environment$(RESET)" && exit 1); \
 	fi
 	$(PIP) install --upgrade pip
 	$(PIP) install -r requirements.txt
