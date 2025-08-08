@@ -20,7 +20,7 @@ RESET := \033[0m
 # Default target
 .DEFAULT_GOAL := help
 
-.PHONY: help ubuntu-setup install-system-deps setup-postgres install setup run clean init-db reset-db test info
+.PHONY: help ubuntu-setup install-system-deps check-system setup-postgres install setup run clean init-db reset-db test info
 
 help: ## Show available commands
 	@echo "$(BLUE)🏸 HPL Auction System - Ubuntu Server Setup$(RESET)"
@@ -35,7 +35,7 @@ help: ## Show available commands
 	@echo "  make clean         # Clean and start fresh"
 	@echo ""
 
-ubuntu-setup: install-system-deps setup-postgres $(VENV_DIR) install init-db ## Complete Ubuntu server setup (ONE COMMAND!)
+ubuntu-setup: install-system-deps check-system setup-postgres $(VENV_DIR) install init-db ## Complete Ubuntu server setup (ONE COMMAND!)
 	@echo "$(GREEN)🎉 Ubuntu setup complete!$(RESET)"
 	@echo ""
 	@echo "$(YELLOW)Next steps:$(RESET)"
@@ -61,6 +61,15 @@ install-system-deps: ## Install system dependencies (Python, PostgreSQL, etc.)
 		curl
 	@echo "$(GREEN)✅ System dependencies installed$(RESET)"
 
+check-system: ## Check if system dependencies are properly installed
+	@echo "$(BLUE)🔍 Checking system dependencies...$(RESET)"
+	@echo "Checking Python installation:"
+	@which $(PYTHON) || (echo "$(RED)❌ $(PYTHON) not found$(RESET)" && exit 1)
+	@$(PYTHON) --version
+	@echo "Checking venv module:"
+	@$(PYTHON) -m venv --help > /dev/null || (echo "$(RED)❌ python3-venv module not available$(RESET)" && exit 1)
+	@echo "$(GREEN)✅ System dependencies check passed$(RESET)"
+
 setup-postgres: ## Setup PostgreSQL database and user
 	@echo "$(BLUE)🗄️  Setting up PostgreSQL database...$(RESET)"
 	@# Start PostgreSQL service
@@ -76,10 +85,18 @@ setup-postgres: ## Setup PostgreSQL database and user
 
 $(VENV_DIR): ## Create virtual environment
 	@echo "$(BLUE)🐍 Creating virtual environment...$(RESET)"
-	$(PYTHON) -m venv $(VENV_DIR)
+	@echo "$(YELLOW)Running: $(PYTHON) -m venv $(VENV_DIR)$(RESET)"
+	$(PYTHON) -m venv $(VENV_DIR) || (echo "$(RED)❌ Virtual environment creation failed$(RESET)" && exit 1)
+	@echo "$(GREEN)✅ Virtual environment created$(RESET)"
 
 install: $(VENV_DIR) ## Install Python dependencies
 	@echo "$(BLUE)📦 Installing Python dependencies...$(RESET)"
+	@if [ ! -f $(PIP) ]; then \
+		echo "$(RED)❌ Virtual environment not properly created - $(PIP) not found$(RESET)"; \
+		echo "$(YELLOW)Trying to recreate virtual environment...$(RESET)"; \
+		rm -rf $(VENV_DIR); \
+		$(MAKE) $(VENV_DIR); \
+	fi
 	$(PIP) install --upgrade pip
 	$(PIP) install -r requirements.txt
 	@echo "$(GREEN)✅ Dependencies installed$(RESET)"
