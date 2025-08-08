@@ -1,0 +1,30 @@
+[server]
+# Production server configuration for high concurrency
+headless = true
+address = "0.0.0.0"
+port = 80
+maxUploadSize = 10
+maxMessageSize = 10
+enableCORS = false
+enableXsrfProtection = true
+allowRunOnSave = false
+
+[browser]
+gatherUsageStats = false
+showErrorDetails = false
+
+[theme]
+# Optional: Use a consistent theme
+primaryColor = "#FF6B35"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F0F2F6"
+textColor = "#262730"
+
+[runner]
+# Optimize for production
+fastReruns = true
+enforceSerializableSessionState = false
+
+[logger]
+# Reduce log verbosity in production
+level = "WARNING"
