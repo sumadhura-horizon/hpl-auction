@@ -339,7 +339,7 @@ class UIManager:
             selected_team = st.selectbox("🏆 Select Team", teams_df["team_name"], key="auction_team_select")
         
         with col2:
-            # Use database-calculated max bid
+            # Use database-calculated max bid - always fresh data
             max_bid = self.db_manager.calculate_max_bid(selected_team)
             remaining_budget = self.db_manager.get_team_remaining_budget(selected_team)
             
@@ -359,10 +359,46 @@ class UIManager:
         with col1:
             st.info(f"💳 Remaining budget: ₹{remaining_budget:,}")
         with col2:
-            st.info(f"🎯 Max bid allowed: ₹{max_allowable:,}")
+            st.info(f"🎯 Max Amount You can Spend on this Player: ₹{max_allowable:,}")
         
-        # Show warning if team is near capacity
-        team_players_count = len(players_df[players_df["owner"] == selected_team])
+        # Show team composition for better understanding (debug info)
+        if st.checkbox("🔍 Show Team Composition Details", value=False, key="show_team_debug"):
+            team_players = players_df[players_df["owner"] == selected_team]
+            marquee_count = len(team_players[team_players.get('category', 'regular') == 'marquee'])
+            regular_count = len(team_players[team_players.get('category', 'regular') == 'regular'])
+            captain_count = len(team_players[team_players.get('category', 'regular') == 'captain'])
+            
+            st.write(f"**{selected_team} Current Squad:**")
+            st.write(f"- Captain: {captain_count}/1")
+            st.write(f"- Marquee: {marquee_count}/3 (need {max(0, 3-marquee_count)} more)")
+            st.write(f"- Regular: {regular_count}/5 (need {max(0, 5-regular_count)} more)")
+            
+            remaining_marquee = max(0, 3 - marquee_count)
+            remaining_regular = max(0, 5 - regular_count)
+            if remaining_marquee > 0 or remaining_regular > 0:
+                reserve_needed = (max(0, remaining_marquee - 1) * config.MARQUEE_PLAYER_MIN_PRICE) + (remaining_regular if remaining_marquee > 0 else max(0, remaining_regular - 1)) * config.REGULAR_PLAYER_MIN_PRICE
+                st.write(f"- **Reserve needed for remaining players: ₹{reserve_needed:,}**")
+                st.write(f"- **Available for current bid: ₹{remaining_budget - reserve_needed:,}**")
+        
+        # Show warnings for team composition and capacity
+        team_players = players_df[players_df["owner"] == selected_team]
+        team_players_count = len(team_players)
+        marquee_count = len(team_players[team_players.get('category', 'regular') == 'marquee'])
+        captain_count = len(team_players[team_players.get('category', 'regular') == 'captain'])
+        player_category = player_details.get('category', 'regular')
+        
+        # Check composition limits
+        composition_warnings = []
+        if player_category == 'marquee' and marquee_count >= 3:
+            composition_warnings.append(f"❌ {selected_team} already has {marquee_count} marquee players (max 3)")
+        elif player_category == 'captain' and captain_count >= 1:
+            composition_warnings.append(f"❌ {selected_team} already has a captain (max 1)")
+        
+        # Show composition warnings
+        for warning in composition_warnings:
+            st.error(warning)
+        
+        # Show capacity warnings
         if team_players_count >= config.REGULAR_PLAYERS_NEEDED:
             st.warning(f"⚠️ {selected_team} already has {team_players_count} players (max {config.MAX_PLAYERS_PER_TEAM} including captain)")
         elif team_players_count >= (config.REGULAR_PLAYERS_NEEDED - 2):
@@ -370,14 +406,29 @@ class UIManager:
         
         # Update button
         if st.button("✅ Update Auction Status", type="primary", use_container_width=True):
-            if self.db_manager.update_player_auction(selected_player, selected_team, auction_price):
+            # Additional frontend validation before calling database
+            if player_category == 'marquee' and marquee_count >= 3:
+                st.error(f"❌ Cannot assign {selected_player}: {selected_team} already has {marquee_count} marquee players (max 3)")
+            elif player_category == 'captain' and captain_count >= 1:
+                st.error(f"❌ Cannot assign {selected_player}: {selected_team} already has a captain (max 1)")
+            elif auction_price > max_allowable:
+                st.error(f"❌ Auction price ₹{auction_price:,} exceeds maximum allowed amount ₹{max_allowable:,} for {selected_team}")
+            elif auction_price < int(player_details["base_price"]):
+                st.error(f"❌ Auction price ₹{auction_price:,} is below base price ₹{int(player_details['base_price']):,}")
+            elif self.db_manager.update_player_auction(selected_player, selected_team, auction_price):
                 st.success(f"🎉 **{selected_player}** sold to **{selected_team}** for **₹{auction_price:,}**")
+                
+                # Show updated budget info immediately
+                new_remaining = self.db_manager.get_team_remaining_budget(selected_team)
+                new_max_bid = self.db_manager.calculate_max_bid(selected_team)
+                st.info(f"💳 **{selected_team}** updated budget: ₹{new_remaining:,} remaining, max next bid: ₹{new_max_bid:,}")
+                
                 # Clear the current auction player since they've been sold
                 self.db_manager.clear_current_auction_player()
                 st.session_state.data_refresh_needed = True
                 st.rerun()
             else:
-                st.error("Failed to update auction status")
+                st.error("❌ Failed to update auction status. Please check if the bid amount is valid, team has sufficient budget, and composition limits (max 3 marquee, 1 captain per team).")
     
     def render_teams_tab(self, players_df: pd.DataFrame, teams_df: pd.DataFrame) -> None:
         """Render the teams tab."""
@@ -515,7 +566,7 @@ class UIManager:
             teams_without_captains = teams_df[~teams_df["team_name"].isin(teams_with_captains)]["team_name"]
             
             if teams_without_captains.empty:
-                st.warning("All teams already have captains assigned.")
+                st.warning("❌ All teams already have captains assigned (max 1 per team).")
                 return
             
             selected_team = st.selectbox("🏆 Select Team", teams_without_captains, key="captain_team_select")
@@ -531,7 +582,7 @@ class UIManager:
                 st.session_state.data_refresh_needed = True
                 st.rerun()
             else:
-                st.error("Failed to assign captain")
+                st.error("❌ Failed to assign captain. Team may already have a captain (max 1 per team).")
     
     def render_player_upload_tab(self) -> None:
         """Render enhanced player data upload tab."""
@@ -578,8 +629,12 @@ class UIManager:
                 
                 if st.form_submit_button("Add Player"):
                     if player_name:
-                        # Add player to database (implementation would need a new method)
-                        st.success(f"Player {player_name} added successfully!")
+                        if self.db_manager.add_individual_player(player_name, base_price, category, photo_url if photo_url else None):
+                            st.success(f"Player {player_name} added successfully!")
+                            st.session_state.data_refresh_needed = True
+                            st.rerun()
+                        else:
+                            st.error(f"Failed to add player {player_name}. Player may already exist.")
                     else:
                         st.error("Please enter player name")
     

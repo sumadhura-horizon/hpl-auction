@@ -47,7 +47,6 @@ class DatabaseManager:
         for attempt in connection_attempts:
             try:
                 conn = psycopg2.connect(**attempt)
-                logger.info(f"Connected to PostgreSQL as user: {attempt['user']}")
                 return conn
             except psycopg2.Error as e:
                 last_error = e
@@ -166,7 +165,54 @@ class DatabaseManager:
         """Update player auction status."""
         try:
             with self.get_connection() as conn:
-                with conn.cursor() as cursor:
+                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+                    
+                    # First validate if the team can afford this bid
+                    max_allowed_bid = self.calculate_max_bid(team_name)
+                    
+                    # Get player details for validation
+                    cursor.execute("SELECT base_price, category FROM players WHERE name = %s", (player_name,))
+                    player_result = cursor.fetchone()
+                    
+                    if not player_result:
+                        logger.error(f"Player {player_name} not found")
+                        return False
+                    
+                    base_price = player_result['base_price']
+                    player_category = player_result['category']
+                    
+                    # Check team composition limits
+                    cursor.execute(
+                        "SELECT category, COUNT(*) as count FROM players WHERE owner = %s AND category IN ('marquee', 'captain') GROUP BY category",
+                        (team_name,)
+                    )
+                    team_composition = cursor.fetchall()
+                    
+                    marquee_count = 0
+                    captain_count = 0
+                    for row in team_composition:
+                        if row['category'] == 'marquee':
+                            marquee_count = row['count']
+                        elif row['category'] == 'captain':
+                            captain_count = row['count']
+                    
+                    # Validate team composition limits
+                    if player_category == 'marquee' and marquee_count >= 3:
+                        logger.error(f"Team {team_name} already has {marquee_count} marquee players (max 3)")
+                        return False
+                    
+                    if player_category == 'captain' and captain_count >= 1:
+                        logger.error(f"Team {team_name} already has {captain_count} captain (max 1)")
+                        return False
+                    
+                    # Validate auction price
+                    if auction_price < base_price:
+                        logger.error(f"Auction price {auction_price} is below base price {base_price} for player {player_name}")
+                        return False
+                    
+                    if auction_price > max_allowed_bid:
+                        logger.error(f"Auction price {auction_price} exceeds maximum allowed bid {max_allowed_bid} for team {team_name}")
+                        return False
                     
                     # Update player
                     cursor.execute(
@@ -342,7 +388,18 @@ class DatabaseManager:
         """Assign a captain to a team."""
         try:
             with self.get_connection() as conn:
-                with conn.cursor() as cursor:
+                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+                    
+                    # Check if team already has a captain
+                    cursor.execute(
+                        "SELECT COUNT(*) as count FROM players WHERE owner = %s AND category = 'captain'",
+                        (team_name,)
+                    )
+                    captain_count = cursor.fetchone()['count']
+                    
+                    if captain_count >= 1:
+                        logger.error(f"Team {team_name} already has a captain (max 1)")
+                        return False
                     
                     # Update player as captain and assign to team
                     cursor.execute(
@@ -363,14 +420,18 @@ class DatabaseManager:
             return False
     
     def calculate_max_bid(self, team_name: str) -> int:
-        """Calculate maximum bid a team can make based on remaining players to buy."""
+        """Calculate maximum bid a team can make based on remaining players to buy.
+        
+        Team requirements: 3 marquee (10L min each) + 5 regular (2L min each) + 1 captain (free)
+        Logic: Reserve minimum amounts for remaining required players, rest can be bid on current player
+        """
         try:
             with self.get_connection() as conn:
                 with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                     
                     # Get team info
                     cursor.execute(
-                        "SELECT budget, spent, players_count FROM teams WHERE team_name = %s",
+                        "SELECT budget, spent FROM teams WHERE team_name = %s",
                         (team_name,)
                     )
                     team_info = cursor.fetchone()
@@ -379,14 +440,42 @@ class DatabaseManager:
                         return 0
                     
                     remaining_budget = team_info['budget'] - team_info['spent']
-                    players_bought = team_info['players_count']
-                    players_remaining = config.REGULAR_PLAYERS_NEEDED - players_bought  # Each team needs players (excluding captain)
                     
-                    if players_remaining <= 0:
+                    # Get count of marquee and regular players already bought by this team
+                    cursor.execute(
+                        "SELECT category, COUNT(*) as count FROM players WHERE owner = %s AND category IN ('marquee', 'regular') GROUP BY category",
+                        (team_name,)
+                    )
+                    bought_players = cursor.fetchall()
+                    
+                    bought_marquee = 0
+                    bought_regular = 0
+                    for row in bought_players:
+                        if row['category'] == 'marquee':
+                            bought_marquee = row['count']
+                        elif row['category'] == 'regular':
+                            bought_regular = row['count']
+                    
+                    # Calculate how many more players we still need to buy (excluding current bid)
+                    marquee_still_needed = max(0, 3 - bought_marquee)  # Need 3 total marquee
+                    regular_still_needed = max(0, 5 - bought_regular)  # Need 5 total regular
+                    total_still_needed = marquee_still_needed + regular_still_needed
+                    
+                    if total_still_needed <= 0:
                         return 0
                     
-                    # Reserve minimum amount for remaining players (2 lakhs each for regular players)
-                    min_reserve = (players_remaining - 1) * config.REGULAR_PLAYER_MIN_PRICE  # Min price for each remaining player except current
+                    if total_still_needed == 1:
+                        # This is the last player, can spend all remaining budget
+                        return remaining_budget
+                    
+                    # For current bid, reserve minimum for remaining players (after this purchase)
+                    # Assume worst case: we'll need to buy remaining marquee and regular at minimum prices
+                    remaining_marquee_after_bid = max(0, marquee_still_needed - 1)  # Assume current is marquee
+                    remaining_regular_after_bid = regular_still_needed if marquee_still_needed > 0 else max(0, regular_still_needed - 1)
+                    
+                    # Reserve minimum amounts for players we'll need to buy later
+                    min_reserve = (remaining_marquee_after_bid * config.MARQUEE_PLAYER_MIN_PRICE) + (remaining_regular_after_bid * config.REGULAR_PLAYER_MIN_PRICE)
+                    
                     max_bid = remaining_budget - min_reserve
                     
                     return max(max_bid, 0)
@@ -466,4 +555,20 @@ class DatabaseManager:
                 return True
         except Exception as e:
             logger.error(f"Error clearing current auction player: {e}")
+            return False
+    
+    def add_individual_player(self, name: str, base_price: int, category: str = 'regular', photo_url: Optional[str] = None) -> bool:
+        """Add a single player to the database."""
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        "INSERT INTO players (name, base_price, category, photo_url) VALUES (%s, %s, %s, %s)",
+                        (name, base_price, category, photo_url)
+                    )
+                conn.commit()
+                logger.info(f"Added player: {name}")
+                return True
+        except Exception as e:
+            logger.error(f"Error adding individual player: {e}")
             return False
