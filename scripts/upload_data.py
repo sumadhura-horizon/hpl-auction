@@ -37,13 +37,9 @@ def upload_csv_data(file_path: str, data_type: str) -> bool:
         
         # Upload based on data type
         if data_type == "users":
-            validation = file_manager.validate_users_csv(df)
-            if not validation['valid']:
-                print("Validation errors:")
-                for error in validation['errors']:
-                    print(f"  - {error}")
-                return False
-            success = db_manager.bulk_insert_users(df)
+            print("❌ Error: Users CSV upload is no longer supported.")
+            print("💡 Use creds.txt file for authentication instead.")
+            return False
         
         elif data_type == "players":
             validation = file_manager.validate_players_csv(df)
@@ -64,7 +60,8 @@ def upload_csv_data(file_path: str, data_type: str) -> bool:
             success = db_manager.bulk_insert_teams(df)
         
         else:
-            print(f"Error: Unknown data type '{data_type}'. Use 'users', 'players', or 'teams'.")
+            print(f"Error: Unknown data type '{data_type}'. Use 'players' or 'teams'.")
+            print("Note: 'users' is no longer supported - use creds.txt instead.")
             return False
         
         if success:

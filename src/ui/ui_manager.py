@@ -32,23 +32,50 @@ class UIManager:
             st.session_state.data_refresh_needed = False
     
     def render_sidebar(self, show_login_form=True) -> None:
-        """Render the sidebar with login/logout functionality."""
+        """Render the sidebar with minimal design."""
         with st.sidebar:
             st.image("assets/hbl.png", width=200)
             
+            # Show minimal login/logout controls
             if not self.auth_manager.is_logged_in():
-                if show_login_form:
-                    self._render_login_form()
-                else:
-                    # For public users, show minimal sidebar
-                    self._render_public_sidebar()
+                self._render_minimal_login()
             else:
                 self._render_user_info()
             
             self._render_admin_controls()
     
+    def _render_minimal_login(self) -> None:
+        """Render minimal login interface."""
+        st.markdown("---")
+        
+        # Small login button that expands into form
+        if st.button("🔐 Admin Login", use_container_width=True):
+            st.session_state.show_login_form = True
+        
+        # Show login form if requested
+        if getattr(st.session_state, 'show_login_form', False):
+            with st.form("admin_login_form"):
+                st.markdown("**Admin Login**")
+                username = st.text_input("Username", key="admin_user")
+                password = st.text_input("Password", type="password", key="admin_pass")
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    if st.form_submit_button("Login"):
+                        if self.auth_manager.login(username, password):
+                            st.success("Login successful!")
+                            st.session_state.show_login_form = False
+                            st.rerun()
+                        else:
+                            st.error("Invalid credentials")
+                
+                with col2:
+                    if st.form_submit_button("Cancel"):
+                        st.session_state.show_login_form = False
+                        st.rerun()
+    
     def _render_login_form(self) -> None:
-        """Render login form."""
+        """Render login form (legacy method)."""
         st.subheader("Login")
         
         with st.form("login_form"):
@@ -107,27 +134,63 @@ class UIManager:
             st.rerun()
         
         if self.auth_manager.has_admin_access():
-            if st.button("Reset Database"):
-                st.warning("⚠️ This will delete all data! Click again to confirm.")
-                if st.button("Confirm Reset Database", type="secondary"):
-                    self.db_manager.reset_database()
-                    self.file_manager.load_initial_data_from_csv()
-                    st.success("Database reset successfully")
-                    st.rerun()
+            st.markdown("### 🛠️ Admin Tools")
+            
+            # Backup Controls
+            with st.expander("💾 Backup & Restore", expanded=False):
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    if st.button("📦 Create Backup", use_container_width=True):
+                        backup_file = self.db_manager.create_backup()
+                        if backup_file:
+                            st.success(f"✅ Backup created: {backup_file.split('/')[-1]}")
+                        else:
+                            st.error("❌ Failed to create backup")
+                    
+                    if st.button("🔄 Auto Backup", use_container_width=True, help="Create backup and cleanup old ones"):
+                        if self.db_manager.auto_backup():
+                            st.success("✅ Auto backup completed")
+                        else:
+                            st.error("❌ Auto backup failed")
+                
+                with col2:
+                    backups = self.db_manager.list_backups()
+                    if backups:
+                        selected_backup = st.selectbox("Select Backup", [f.split('/')[-1] for f in backups])
+                        if st.button("📥 Restore Backup", use_container_width=True):
+                            full_backup_path = next(f for f in backups if selected_backup in f)
+                            if self.db_manager.restore_backup(full_backup_path):
+                                st.success("✅ Backup restored successfully!")
+                                st.session_state.data_refresh_needed = True
+                                st.rerun()
+                            else:
+                                st.error("❌ Failed to restore backup")
+                    else:
+                        st.info("No backups available")
+            
+            # Database Controls
+            with st.expander("🗃️ Database Management", expanded=False):
+                if st.button("⚠️ Reset Database", type="secondary"):
+                    if st.button("🚨 CONFIRM RESET - This will delete ALL data!", type="secondary"):
+                        # Create backup before reset
+                        backup_file = self.db_manager.create_backup()
+                        if backup_file:
+                            st.info(f"Backup created before reset: {backup_file.split('/')[-1]}")
+                        
+                        self.db_manager.reset_database()
+                        self.file_manager.load_initial_data_from_csv()
+                        st.success("Database reset successfully")
+                        st.rerun()
             
             self._render_file_upload_section()
     
     def _render_file_upload_section(self) -> None:
         """Render file upload section for admins."""
-        st.subheader("Upload CSV Files")
+        st.subheader("📤 Upload CSV Files")
         
-        with st.expander("Upload Data Files"):
-            # Users upload
-            users_file = st.file_uploader("Upload Users CSV", type="csv", key="users_upload")
-            if users_file is not None:
-                if st.button("Upload Users", key="upload_users_btn"):
-                    self.file_manager.upload_users_csv(users_file)
-                    st.rerun()
+        with st.expander("Upload Data Files", expanded=False):
+            st.markdown("**Upload initial data files to populate the system.**")
             
             # Teams upload
             teams_file = st.file_uploader("Upload Teams CSV", type="csv", key="teams_upload")
@@ -142,6 +205,8 @@ class UIManager:
                 if st.button("Upload Players", key="upload_players_btn"):
                     self.file_manager.upload_players_csv(players_file)
                     st.rerun()
+            
+            st.info("💡 **Note:** User authentication is now managed via `creds.txt` file. No need to upload users CSV.")
     
     def load_data_with_cache(self) -> tuple[pd.DataFrame, pd.DataFrame]:
         """Load data with session state caching."""
@@ -170,18 +235,16 @@ class UIManager:
                     try:
                         st.image(player_details['photo_url'], width=120)
                     except:
-                        # Generate random avatar based on player name hash
+                        # Generate random male avatar based on player name hash
                         name_hash = hash(player_details['name']) % 100 + 1
-                        gender = "women" if name_hash % 2 == 0 else "men"
-                        avatar_id = (name_hash % 50) + 1  # Use IDs 1-50 for variety
-                        default_avatar = f"https://randomuser.me/api/portraits/{gender}/{avatar_id}.jpg"
+                        avatar_id = (name_hash % 99) + 1  # Use IDs 1-99 for more variety
+                        default_avatar = f"https://randomuser.me/api/portraits/men/{avatar_id}.jpg"
                         st.image(default_avatar, width=120)
                 else:
-                    # Generate random avatar based on player name hash
+                    # Generate random male avatar based on player name hash
                     name_hash = hash(player_details['name']) % 100 + 1
-                    gender = "women" if name_hash % 2 == 0 else "men"
-                    avatar_id = (name_hash % 50) + 1  # Use IDs 1-50 for variety
-                    default_avatar = f"https://randomuser.me/api/portraits/{gender}/{avatar_id}.jpg"
+                    avatar_id = (name_hash % 99) + 1  # Use IDs 1-99 for more variety
+                    default_avatar = f"https://randomuser.me/api/portraits/men/{avatar_id}.jpg"
                     st.image(default_avatar, width=120)
             
             with col2:
@@ -231,7 +294,7 @@ class UIManager:
             
             col1, col2, col3, col4 = st.columns(4)
             with col1:
-                st.metric("Players", f"{player_count}/{config.MAX_PLAYERS_PER_TEAM}")  # Regular + captain
+                st.metric("Players", f"{player_count}/{config.MAX_PLAYERS_PER_TEAM}")  # Total including captain
             with col2:
                 st.metric("Total Spent", f"₹{total_spent:,}")
             with col3:
@@ -371,10 +434,10 @@ class UIManager:
             st.write(f"**{selected_team} Current Squad:**")
             st.write(f"- Captain: {captain_count}/1")
             st.write(f"- Marquee: {marquee_count}/3 (need {max(0, 3-marquee_count)} more)")
-            st.write(f"- Regular: {regular_count}/5 (need {max(0, 5-regular_count)} more)")
+            st.write(f"- Regular: {regular_count}/6 (need {max(0, 6-regular_count)} more)")
             
             remaining_marquee = max(0, 3 - marquee_count)
-            remaining_regular = max(0, 5 - regular_count)
+            remaining_regular = max(0, 6 - regular_count)
             if remaining_marquee > 0 or remaining_regular > 0:
                 reserve_needed = (max(0, remaining_marquee - 1) * config.MARQUEE_PLAYER_MIN_PRICE) + (remaining_regular if remaining_marquee > 0 else max(0, remaining_regular - 1)) * config.REGULAR_PLAYER_MIN_PRICE
                 st.write(f"- **Reserve needed for remaining players: ₹{reserve_needed:,}**")
@@ -398,10 +461,10 @@ class UIManager:
         for warning in composition_warnings:
             st.error(warning)
         
-        # Show capacity warnings
-        if team_players_count >= config.REGULAR_PLAYERS_NEEDED:
+        # Show capacity warnings  
+        if team_players_count >= config.MAX_PLAYERS_PER_TEAM:
             st.warning(f"⚠️ {selected_team} already has {team_players_count} players (max {config.MAX_PLAYERS_PER_TEAM} including captain)")
-        elif team_players_count >= (config.REGULAR_PLAYERS_NEEDED - 2):
+        elif team_players_count >= (config.MAX_PLAYERS_PER_TEAM - 2):
             st.info(f"ℹ️ {selected_team} has {team_players_count} players. {config.MAX_PLAYERS_PER_TEAM-team_players_count} more needed.")
         
         # Update button
@@ -422,6 +485,9 @@ class UIManager:
                 new_remaining = self.db_manager.get_team_remaining_budget(selected_team)
                 new_max_bid = self.db_manager.calculate_max_bid(selected_team)
                 st.info(f"💳 **{selected_team}** updated budget: ₹{new_remaining:,} remaining, max next bid: ₹{new_max_bid:,}")
+                
+                # Auto-backup after successful auction
+                self.db_manager.auto_backup()
                 
                 # Clear the current auction player since they've been sold
                 self.db_manager.clear_current_auction_player()
@@ -579,6 +645,8 @@ class UIManager:
         if st.button("👑 Assign Captain", type="primary", use_container_width=True):
             if self.db_manager.assign_captain(selected_captain, selected_team):
                 st.success(f"🎉 **{selected_captain}** assigned as captain to **{selected_team}**")
+                # Auto-backup after captain assignment
+                self.db_manager.auto_backup()
                 st.session_state.data_refresh_needed = True
                 st.rerun()
             else:

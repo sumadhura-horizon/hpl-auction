@@ -20,6 +20,7 @@ class Config:
     APP_HOST: str = os.getenv('APP_HOST', 'localhost')
     
     # Auction Configuration
+    # Team Composition: 1 Captain (free) + 3 Marquee (min 10L each) + 6 Regular (min 2L each) = 10 Total
     TEAM_BUDGET: int = int(os.getenv('TEAM_BUDGET', '10000000'))  # 1 crore
     REGULAR_PLAYER_MIN_PRICE: int = int(os.getenv('REGULAR_PLAYER_MIN_PRICE', '200000'))  # 2 lakhs
     MARQUEE_PLAYER_MIN_PRICE: int = int(os.getenv('MARQUEE_PLAYER_MIN_PRICE', '1000000'))  # 10 lakhs
@@ -27,8 +28,8 @@ class Config:
     AUCTION_PRICE_STEP: int = int(os.getenv('AUCTION_PRICE_STEP', '25000'))  # 25k steps
     DEFAULT_PLAYER_BASE_PRICE: int = int(os.getenv('DEFAULT_PLAYER_BASE_PRICE', '200000'))  # 2 lakhs
     PLAYER_BASE_PRICE_STEP: int = int(os.getenv('PLAYER_BASE_PRICE_STEP', '100000'))  # 1 lakh steps
-    MAX_PLAYERS_PER_TEAM: int = int(os.getenv('MAX_PLAYERS_PER_TEAM', '9'))  # Including captain
-    REGULAR_PLAYERS_NEEDED: int = int(os.getenv('REGULAR_PLAYERS_NEEDED', '8'))  # Excluding captain
+    MAX_PLAYERS_PER_TEAM: int = int(os.getenv('MAX_PLAYERS_PER_TEAM', '10'))  # Total: 1 captain + 3 marquee + 6 regular
+    REGULAR_PLAYERS_NEEDED: int = int(os.getenv('REGULAR_PLAYERS_NEEDED', '9'))  # Non-captain players: 3 marquee + 6 regular
     
     # Environment
     ENVIRONMENT: str = os.getenv('ENVIRONMENT', 'development')

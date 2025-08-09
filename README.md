@@ -12,11 +12,13 @@ A comprehensive auction management system built with Streamlit, featuring user a
 - **Data Export**: Download player and team data as CSV
 
 ### 🛠️ Technical Features
-- **SQLite Database**: Reliable local data storage
-- **CSV Upload**: Bulk data upload functionality
+- **PostgreSQL Database**: Reliable database storage with proper connection handling
+- **CSV Upload**: Bulk data upload functionality for teams and players
 - **Data Validation**: Comprehensive input validation
 - **Error Handling**: Robust error handling and logging
 - **Clean Architecture**: Modular code design following best practices
+- **Automatic Backups**: Auto-backup on every transaction with restore functionality
+- **Secure Authentication**: File-based credential system (creds.txt)
 
 ## Installation
 
@@ -133,7 +135,6 @@ The project includes a comprehensive Makefile with the following commands:
 ### Database Commands
 - `make init-db` - Initialize database with initial data
 - `make reset-db` - Reset database (WARNING: Deletes all data)
-- `make upload-users FILE=path/to/users.csv` - Upload users from CSV
 - `make upload-players FILE=path/to/players.csv` - Upload players from CSV
 - `make upload-teams FILE=path/to/teams.csv` - Upload teams from CSV
 - `make backup-db` - Backup database file
@@ -152,12 +153,11 @@ Run `make help` to see all available commands with descriptions.
 
 ### CSV File Formats
 
-#### users.csv
-```csv
-username,password,role
-admin,!hpl@Sumadhura,admin
-auctioneer,Naresh@123,auctioneer
-owner1,owner123,owner
+#### Authentication
+Authentication is now handled via `creds.txt` file instead of CSV upload:
+```
+# Format: username:password:role
+auctioneer:Sum@dhura@123@HBL:admin
 ```
 
 #### teams.csv
@@ -236,10 +236,11 @@ hpl-auction/
 ├── tests/                      # Test files
 │   └── test_auction.py         # Test suite
 │
-├── data/                       # Initial CSV data
-│   ├── users.csv
+├── data/                       # Initial CSV data  
 │   ├── teams.csv
 │   └── players.csv
+├── creds.txt                   # Authentication credentials (not in git)
+├── backups/                    # Auto-created backup directory
 │
 ├── assets/                     # Static assets
 │   └── hbl.png                 # Logo image
@@ -276,13 +277,19 @@ The application uses Python's built-in logging module. Logs include:
 ### Common Issues
 
 1. **Login not working**
-   - Ensure database is initialized: `python upload_data.py init`
-   - Check if users.csv exists in data/ directory
-   - Verify credentials match those in users.csv
+   - Ensure creds.txt file exists in root directory
+   - Verify credentials in creds.txt file (format: username:password:role)
+   - Default credentials: auctioneer:Sum@dhura@123@HBL:admin
 
 2. **Database errors**
    - Reset database: `python upload_data.py reset`
    - Reload initial data: `python upload_data.py init`
+
+3. **Data Recovery**
+   - All auction transactions are automatically backed up
+   - Access backups via Admin Tools → "💾 Backup & Restore" in sidebar
+   - Backup files stored in `backups/` directory as JSON files
+   - To restore: Select backup from dropdown and click "📥 Restore Backup"
 
 3. **CSV upload failures**
    - Check CSV format matches expected schema

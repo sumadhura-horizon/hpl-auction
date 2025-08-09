@@ -16,37 +16,6 @@ class FileUploadManager:
     def __init__(self, db_manager: DatabaseManager):
         self.db_manager = db_manager
     
-    def validate_users_csv(self, df: pd.DataFrame) -> Dict[str, Any]:
-        """Validate users CSV format."""
-        required_columns = {'username', 'password', 'role'}
-        valid_roles = {'admin', 'auctioneer', 'owner'}
-        
-        result = {'valid': True, 'errors': []}
-        
-        # Check required columns
-        if not required_columns.issubset(set(df.columns)):
-            missing = required_columns - set(df.columns)
-            result['valid'] = False
-            result['errors'].append(f"Missing required columns: {missing}")
-        
-        # Check for empty values
-        if df.isnull().any().any():
-            result['valid'] = False
-            result['errors'].append("CSV contains empty values")
-        
-        # Check valid roles
-        if 'role' in df.columns:
-            invalid_roles = set(df['role']) - valid_roles
-            if invalid_roles:
-                result['valid'] = False
-                result['errors'].append(f"Invalid roles found: {invalid_roles}")
-        
-        # Check for duplicate usernames
-        if 'username' in df.columns and df['username'].duplicated().any():
-            result['valid'] = False
-            result['errors'].append("Duplicate usernames found")
-        
-        return result
     
     def validate_players_csv(self, df: pd.DataFrame) -> Dict[str, Any]:
         """Validate players CSV format."""
@@ -105,29 +74,6 @@ class FileUploadManager:
         
         return result
     
-    def upload_users_csv(self, uploaded_file) -> bool:
-        """Upload and process users CSV file."""
-        try:
-            df = pd.read_csv(uploaded_file)
-            validation = self.validate_users_csv(df)
-            
-            if not validation['valid']:
-                for error in validation['errors']:
-                    st.error(f"Users CSV validation error: {error}")
-                return False
-            
-            success = self.db_manager.bulk_insert_users(df)
-            if success:
-                st.success(f"Successfully uploaded {len(df)} users")
-            else:
-                st.error("Failed to upload users to database")
-            
-            return success
-            
-        except Exception as e:
-            logger.error(f"Error uploading users CSV: {e}")
-            st.error(f"Error processing users CSV: {e}")
-            return False
     
     def upload_players_csv(self, uploaded_file) -> bool:
         """Upload and process players CSV file."""
@@ -196,15 +142,6 @@ class FileUploadManager:
     def load_initial_data_from_csv(self) -> None:
         """Load initial data from CSV files if tables are empty."""
         try:
-            # Load users if table is empty
-            if self.db_manager.is_table_empty("users"):
-                try:
-                    users_df = pd.read_csv("data/users.csv")
-                    self.db_manager.bulk_insert_users(users_df)
-                    logger.info("Loaded initial users data")
-                except FileNotFoundError:
-                    logger.warning("No users.csv found in data directory")
-            
             # Load teams if table is empty
             if self.db_manager.is_table_empty("teams"):
                 try:

@@ -76,6 +76,10 @@ node_modules/
 # Backup files
 *.bak
 *.backup
+backups/
+
+# Credentials and sensitive files
+creds.txt
 
 # misc
 .claude/

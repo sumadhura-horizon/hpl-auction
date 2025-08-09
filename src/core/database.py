@@ -7,6 +7,9 @@ import pandas as pd
 from typing import List, Optional
 import logging
 import os
+import json
+from datetime import datetime
+from pathlib import Path
 from .models import User, Player, Team
 from .config import config
 
@@ -260,34 +263,6 @@ class DatabaseManager:
             logger.error(f"Error undoing player auction: {e}")
             return False
     
-    def bulk_insert_users(self, users_df: pd.DataFrame) -> bool:
-        """Bulk insert users from DataFrame."""
-        try:
-            with self.get_connection() as conn:
-                with conn.cursor() as cursor:
-                    # Drop and recreate the users table to ensure proper schema
-                    cursor.execute("DROP TABLE IF EXISTS users CASCADE")
-                    cursor.execute('''
-                        CREATE TABLE users (
-                            id SERIAL PRIMARY KEY,
-                            username VARCHAR(255) NOT NULL UNIQUE,
-                            password VARCHAR(255) NOT NULL,
-                            role VARCHAR(50) NOT NULL
-                        )
-                    ''')
-                    
-                    # Insert data row by row to respect the schema
-                    for _, row in users_df.iterrows():
-                        cursor.execute(
-                            "INSERT INTO users (username, password, role) VALUES (%s, %s, %s)",
-                            (row['username'], row['password'], row['role'])
-                        )
-                conn.commit()
-            logger.info(f"Inserted {len(users_df)} users")
-            return True
-        except Exception as e:
-            logger.error(f"Error inserting users: {e}")
-            return False
     
     def bulk_insert_players(self, players_df: pd.DataFrame) -> bool:
         """Bulk insert players from DataFrame."""
@@ -422,7 +397,7 @@ class DatabaseManager:
     def calculate_max_bid(self, team_name: str) -> int:
         """Calculate maximum bid a team can make based on remaining players to buy.
         
-        Team requirements: 3 marquee (10L min each) + 5 regular (2L min each) + 1 captain (free)
+        Team requirements: 3 marquee (10L min each) + 6 regular (2L min each) + 1 captain (free)
         Logic: Reserve minimum amounts for remaining required players, rest can be bid on current player
         """
         try:
@@ -458,7 +433,7 @@ class DatabaseManager:
                     
                     # Calculate how many more players we still need to buy (excluding current bid)
                     marquee_still_needed = max(0, 3 - bought_marquee)  # Need 3 total marquee
-                    regular_still_needed = max(0, 5 - bought_regular)  # Need 5 total regular
+                    regular_still_needed = max(0, 6 - bought_regular)  # Need 6 total regular
                     total_still_needed = marquee_still_needed + regular_still_needed
                     
                     if total_still_needed <= 0:
@@ -571,4 +546,148 @@ class DatabaseManager:
                 return True
         except Exception as e:
             logger.error(f"Error adding individual player: {e}")
+            return False
+    
+    def create_backup(self) -> str:
+        """Create a complete backup of all auction data."""
+        try:
+            # Create backups directory if it doesn't exist
+            backup_dir = Path("backups")
+            backup_dir.mkdir(exist_ok=True)
+            
+            # Generate timestamp for backup filename
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_file = backup_dir / f"auction_backup_{timestamp}.json"
+            
+            backup_data = {
+                "timestamp": timestamp,
+                "tables": {},
+                "auction_state": {}
+            }
+            
+            with self.get_connection() as conn:
+                # Backup players table
+                players_df = pd.read_sql_query("SELECT * FROM players", conn)
+                backup_data["tables"]["players"] = players_df.to_dict(orient="records")
+                
+                # Backup teams table
+                teams_df = pd.read_sql_query("SELECT * FROM teams", conn)
+                backup_data["tables"]["teams"] = teams_df.to_dict(orient="records")
+                
+                # Backup users table
+                users_df = pd.read_sql_query("SELECT * FROM users", conn)
+                backup_data["tables"]["users"] = users_df.to_dict(orient="records")
+                
+                # Backup auction state
+                auction_state_df = pd.read_sql_query("SELECT * FROM auction_state", conn)
+                backup_data["tables"]["auction_state"] = auction_state_df.to_dict(orient="records")
+            
+            # Save backup to JSON file
+            with open(backup_file, 'w', encoding='utf-8') as f:
+                json.dump(backup_data, f, indent=2, default=str)
+            
+            logger.info(f"Backup created: {backup_file}")
+            return str(backup_file)
+            
+        except Exception as e:
+            logger.error(f"Error creating backup: {e}")
+            return None
+    
+    def restore_backup(self, backup_file: str) -> bool:
+        """Restore auction data from backup file."""
+        try:
+            backup_path = Path(backup_file)
+            if not backup_path.exists():
+                logger.error(f"Backup file not found: {backup_file}")
+                return False
+            
+            # Load backup data
+            with open(backup_path, 'r', encoding='utf-8') as f:
+                backup_data = json.load(f)
+            
+            with self.get_connection() as conn:
+                with conn.cursor() as cursor:
+                    
+                    # Clear existing data
+                    cursor.execute("DELETE FROM auction_state")
+                    cursor.execute("DELETE FROM players")
+                    cursor.execute("DELETE FROM teams")
+                    cursor.execute("DELETE FROM users")
+                    
+                    # Restore users
+                    users_data = backup_data["tables"].get("users", [])
+                    for user in users_data:
+                        cursor.execute(
+                            "INSERT INTO users (username, password, role) VALUES (%s, %s, %s)",
+                            (user['username'], user['password'], user['role'])
+                        )
+                    
+                    # Restore teams
+                    teams_data = backup_data["tables"].get("teams", [])
+                    for team in teams_data:
+                        cursor.execute(
+                            "INSERT INTO teams (team_name, budget, spent, players_count, captain) VALUES (%s, %s, %s, %s, %s)",
+                            (team['team_name'], team['budget'], team['spent'], team['players_count'], team.get('captain'))
+                        )
+                    
+                    # Restore players
+                    players_data = backup_data["tables"].get("players", [])
+                    for player in players_data:
+                        cursor.execute(
+                            "INSERT INTO players (name, base_price, owner, auction_price, category, photo_url) VALUES (%s, %s, %s, %s, %s, %s)",
+                            (player['name'], player['base_price'], player.get('owner'), 
+                             player.get('auction_price', 0), player.get('category', 'regular'), 
+                             player.get('photo_url'))
+                        )
+                    
+                    # Restore auction state
+                    auction_state_data = backup_data["tables"].get("auction_state", [])
+                    for state in auction_state_data:
+                        cursor.execute(
+                            "INSERT INTO auction_state (current_player_name, auction_phase, last_updated) VALUES (%s, %s, %s)",
+                            (state.get('current_player_name'), state.get('auction_phase', 'marquee'), 
+                             state.get('last_updated'))
+                        )
+                
+                conn.commit()
+            
+            logger.info(f"Backup restored from: {backup_file}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error restoring backup: {e}")
+            return False
+    
+    def list_backups(self) -> List[str]:
+        """List all available backup files."""
+        backup_dir = Path("backups")
+        if not backup_dir.exists():
+            return []
+        
+        backup_files = list(backup_dir.glob("auction_backup_*.json"))
+        backup_files.sort(reverse=True)  # Most recent first
+        return [str(f) for f in backup_files]
+    
+    def auto_backup(self) -> bool:
+        """Create an automatic backup with cleanup of old backups."""
+        try:
+            # Create backup
+            backup_file = self.create_backup()
+            if not backup_file:
+                return False
+            
+            # Clean up old backups (keep last 10)
+            backups = self.list_backups()
+            if len(backups) > 10:
+                for old_backup in backups[10:]:
+                    try:
+                        os.remove(old_backup)
+                        logger.info(f"Removed old backup: {old_backup}")
+                    except Exception as e:
+                        logger.warning(f"Could not remove old backup {old_backup}: {e}")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error in auto backup: {e}")
             return False
